@@ -19,8 +19,13 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isLoaded && !isSignedIn) {
-      router.push('/sign-in');
+    if (isLoaded) {
+      if (!isSignedIn) {
+        router.push('/sign-in');
+      } else {
+        // Redirect to companies page
+        router.push('/companies');
+      }
     }
   }, [isLoaded, isSignedIn, router]);
 
@@ -47,7 +52,7 @@ export default function Dashboard() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ memory: memoryData.data }),
+        body: JSON.stringify({ companyId }),
       });
       
       const formResult = await formResponse.json();

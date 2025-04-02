@@ -1,0 +1,112 @@
+{
+    "ACORD_125": {
+      "header": {
+        "date": "",
+        "agency": {
+          "name": "",
+          "contact_name": "",
+          "phone": "",
+          "fax": "",
+          "email": "",
+          "agency_customer_id": ""
+        },
+        "carrier": {
+          "name": "",
+          "naic_code": "",
+          "policy_number": ""
+        },
+        "status_of_transaction": {
+          "transaction_type": ""
+        }
+      },
+      "policy_information": {
+        "proposed_eff_date": "",
+        "proposed_exp_date": "",
+        "billing_plan": "",
+        "payment_plan": "",
+        "policy_premium": 0
+      },
+      "applicant_information": {
+        "named_insured": {
+          "name": "",
+          "mailing_address": {
+            "street_address": "",
+            "city": "",
+            "state": "",
+            "zip": ""
+          },
+          "gl_code": "",
+          "sic": "",
+          "naics": "",
+          "fein_or_soc_sec": "",
+          "business_phone": "",
+          "website_address": "",
+          "entity_type": ""
+        }
+      },
+      "contact_information": {
+        "contact_name": "",
+        "primary_phone": "",
+        "primary_email": ""
+      },
+      "premises_information": {
+        "location": {
+          "street": "",
+          "city": "",
+          "state": "",
+          "zip": "",
+          "interest": "",
+          "full_time_employees": 0,
+          "part_time_employees": 0,
+          "annual_revenues": 0,
+          "description_of_operations": ""
+        }
+      },
+      "general_information": {
+        "has_subsidiaries": false,
+        "safety_program": {
+          "has_program": false,
+          "safety_manual": false,
+          "monthly_meetings": false
+        },
+        "exposures": {
+          "has_exposure_to_hazards": false,
+          "details": ""
+        },
+        "prior_cancellations": {
+          "has_prior_cancellations": false,
+          "reason": ""
+        },
+        "bankruptcy": {
+          "has_bankruptcy": false,
+          "details": ""
+        }
+      },
+      "nature_of_business": {
+        "business_type": "",
+        "date_business_started": "",
+        "description_primary_operations": ""
+      },
+      "prior_carrier_information": {
+        "carrier_name": "",
+        "policy_number": "",
+        "effective_date": "",
+        "expiration_date": "",
+        "premium": 0
+      },
+      "loss_history": {
+        "has_losses": false,
+        "claims": [
+          {
+            "date_of_occurrence": "",
+            "description": "",
+            "amount_paid": 0,
+            "amount_reserved": 0,
+            "status": ""
+          }
+        ],
+        "total_losses": 0
+      },
+      "remarks": ""
+    }
+  }

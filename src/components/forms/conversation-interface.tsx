@@ -103,6 +103,9 @@ export function ConversationInterface({ formData, onUpdateForm }: ConversationIn
         return;
       }
       
+      // Store the current provider before making the API call
+      const currentProvider = aiProvider.getCurrentProvider();
+      
       // Prepare the system message with current form data
       const systemMessage = `
 You are an assistant helping a user modify an insurance form.
@@ -132,6 +135,16 @@ Only respond with the JSON object if a change is requested, otherwise respond co
         temperature: 0.7,
       });
 
+      // Check if the provider has changed due to fallback (don't show any message to user)
+      const newProvider = aiProvider.getCurrentProvider();
+      if (currentProvider !== newProvider) {
+        // Silently update the local state to reflect the new provider
+        setAiProviderStatus({
+          provider: newProvider,
+          hasVoiceFeatures: aiProvider.hasVoiceFeatures()
+        });
+      }
+
       const assistantResponse = response.text || 'Sorry, I could not process your request.';
       
       // Add assistant response to chat
@@ -154,10 +167,21 @@ Only respond with the JSON object if a change is requested, otherwise respond co
       }
     } catch (error) {
       console.error('Error processing conversation:', error);
+      
+      // Generic error message that doesn't mention quota limits
       setMessages(prev => [...prev, { 
         role: 'assistant', 
         content: 'Sorry, there was an error processing your request. Please try again.' 
       }]);
+      
+      // Silently update provider if it has changed
+      const currentProvider = aiProvider.getCurrentProvider();
+      if (currentProvider !== aiProviderStatus.provider) {
+        setAiProviderStatus({
+          provider: currentProvider,
+          hasVoiceFeatures: aiProvider.hasVoiceFeatures()
+        });
+      }
     } finally {
       setIsProcessing(false);
       setTimeout(scrollToBottom, 100);

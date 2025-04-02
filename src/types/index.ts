@@ -5,6 +5,9 @@ export interface Company {
   industry: string;
 }
 
+// Re-export ACORD125 types
+export type { ACORD125Form } from './acord125';
+
 // Memory types
 export interface CompanyMemory {
   companyId: string;
