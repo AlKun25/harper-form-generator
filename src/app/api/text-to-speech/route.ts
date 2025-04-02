@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
-
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || '',
-});
+import aiProvider, { AIProviderType } from '@/lib/ai-services/ai-provider';
 
 export async function POST(request: NextRequest) {
   try {
+    // Check if we have an AI provider that supports voice
+    if (aiProvider.getCurrentProvider() !== AIProviderType.OPENAI) {
+      return NextResponse.json(
+        { success: false, error: 'Voice features are not available' },
+        { status: 503 }
+      );
+    }
+
     const body = await request.json();
-    const { text } = body;
+    const { text, voice } = body;
 
     if (!text) {
       return NextResponse.json(
@@ -18,21 +21,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate speech using OpenAI TTS
-    const mp3 = await openai.audio.speech.create({
-      model: 'tts-1',
-      voice: 'nova',
-      input: text,
+    // Generate speech using the AI provider
+    const result = await aiProvider.textToSpeech({
+      text,
+      voice: voice || 'nova'
     });
 
-    // Convert the audio to an ArrayBuffer
-    const buffer = await mp3.arrayBuffer();
-
     // Return the audio as a streaming response
-    return new NextResponse(buffer, {
+    return new NextResponse(result.audioBuffer, {
       headers: {
         'Content-Type': 'audio/mpeg',
-        'Content-Length': buffer.byteLength.toString(),
+        'Content-Length': result.audioBuffer.byteLength.toString(),
       },
     });
   } catch (error) {

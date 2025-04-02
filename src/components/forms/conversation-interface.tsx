@@ -1,20 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { InsuranceForm } from '@/types';
-import OpenAI from 'openai';
 import { Mic, MicOff, Volume2, VolumeX, Send, AlertCircle, Loader2 } from 'lucide-react';
 import useVoiceRecording from '@/hooks/useVoiceRecording';
 import useTextToSpeech from '@/hooks/useTextToSpeech';
+import aiProvider, { AIProviderType } from '@/lib/ai-services/ai-provider';
 
 interface ConversationInterfaceProps {
   formData: InsuranceForm;
   onUpdateForm: (updates: Partial<InsuranceForm>) => void;
 }
-
-const openai = new OpenAI({
-  apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY || '',
-  dangerouslyAllowBrowser: true,
-});
 
 interface Message {
   role: 'user' | 'assistant';
@@ -32,6 +27,21 @@ export function ConversationInterface({ formData, onUpdateForm }: ConversationIn
   const [isProcessing, setIsProcessing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [isBrowserSupported, setIsBrowserSupported] = useState(false);
+  const [aiProviderStatus, setAiProviderStatus] = useState<{
+    provider: AIProviderType;
+    hasVoiceFeatures: boolean;
+  }>({
+    provider: AIProviderType.NONE,
+    hasVoiceFeatures: false
+  });
+
+  // Get the AI provider status on mount
+  useEffect(() => {
+    setAiProviderStatus({
+      provider: aiProvider.getCurrentProvider(),
+      hasVoiceFeatures: aiProvider.hasVoiceFeatures()
+    });
+  }, []);
 
   // Initialize voice recording hook
   const { 
@@ -80,6 +90,19 @@ export function ConversationInterface({ formData, onUpdateForm }: ConversationIn
     setIsProcessing(true);
     
     try {
+      // Check if we have an AI provider available
+      if (aiProviderStatus.provider === AIProviderType.NONE) {
+        // If no AI provider is available, just acknowledge the message
+        setMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: 'I apologize, but the AI assistant is currently unavailable. Please edit the form directly.' 
+        }]);
+        setIsProcessing(false);
+        setTimeout(scrollToBottom, 100);
+        setUserInput('');
+        return;
+      }
+      
       // Prepare the system message with current form data
       const systemMessage = `
 You are an assistant helping a user modify an insurance form.
@@ -99,9 +122,8 @@ If you can't determine what to update, ask for clarification.
 Only respond with the JSON object if a change is requested, otherwise respond conversationally.
 `;
 
-      // Call the OpenAI API
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+      // Call the AI provider
+      const response = await aiProvider.chatCompletion({
         messages: [
           { role: 'system', content: systemMessage },
           ...messages.map(m => ({ role: m.role, content: m.content })),
@@ -110,7 +132,7 @@ Only respond with the JSON object if a change is requested, otherwise respond co
         temperature: 0.7,
       });
 
-      const assistantResponse = response.choices[0]?.message?.content || 'Sorry, I could not process your request.';
+      const assistantResponse = response.text || 'Sorry, I could not process your request.';
       
       // Add assistant response to chat
       setMessages(prev => [...prev, { role: 'assistant', content: assistantResponse }]);
@@ -126,8 +148,8 @@ Only respond with the JSON object if a change is requested, otherwise respond co
         }
       }
 
-      // Automatically speak the assistant's response
-      if (assistantResponse) {
+      // Automatically speak the assistant's response if voice features are available
+      if (assistantResponse && aiProviderStatus.hasVoiceFeatures) {
         speakText(assistantResponse);
       }
     } catch (error) {
@@ -149,6 +171,10 @@ Only respond with the JSON object if a change is requested, otherwise respond co
   };
 
   const handleVoiceToggle = () => {
+    if (!aiProviderStatus.hasVoiceFeatures) {
+      return;
+    }
+    
     if (isRecording) {
       // When stopping, set autoSubmit to true to automatically send the message
       stopRecording(true);
@@ -158,6 +184,10 @@ Only respond with the JSON object if a change is requested, otherwise respond co
   };
 
   const handleSpeechToggle = () => {
+    if (!aiProviderStatus.hasVoiceFeatures) {
+      return;
+    }
+    
     if (isPlaying) {
       stopSpeech();
     } else {
@@ -168,14 +198,22 @@ Only respond with the JSON object if a change is requested, otherwise respond co
       }
     }
   };
+  
+  // Determine if voice features should be shown
+  const showVoiceFeatures = isBrowserSupported && aiProviderStatus.hasVoiceFeatures;
 
   return (
     <div className="flex flex-col h-[500px] border rounded-lg shadow-sm bg-white dark:bg-gray-800 overflow-hidden">
       <div className="bg-gray-50 dark:bg-gray-800 p-4 border-b dark:border-gray-700">
         <div className="flex justify-between items-center">
-          <h3 className="font-medium text-gray-900 dark:text-gray-100">Voice-Enabled Form Editor</h3>
+          <h3 className="font-medium text-gray-900 dark:text-gray-100">
+            {aiProviderStatus.provider !== AIProviderType.NONE 
+              ? 'Voice-Enabled Form Editor' 
+              : 'Form Editor'
+            }
+          </h3>
           <div className="flex space-x-2">
-            {isBrowserSupported && (
+            {showVoiceFeatures && (
               <>
                 <Button 
                   type="button" 
@@ -206,8 +244,23 @@ Only respond with the JSON object if a change is requested, otherwise respond co
           </div>
         </div>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Speak or type to update any field in the form
+          {aiProviderStatus.provider !== AIProviderType.NONE
+            ? 'Speak or type to update any field in the form'
+            : 'Type to update any field in the form'
+          }
         </p>
+        {aiProviderStatus.provider === AIProviderType.GEMINI && (
+          <div className="flex items-center mt-2 p-2 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-800">
+            <AlertCircle size={14} className="mr-1 flex-shrink-0" />
+            <span>Using text-only mode with Gemini AI. Voice features are not available.</span>
+          </div>
+        )}
+        {aiProviderStatus.provider === AIProviderType.NONE && (
+          <div className="flex items-center mt-2 p-2 text-xs text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 rounded border border-yellow-200 dark:border-yellow-800">
+            <AlertCircle size={14} className="mr-1 flex-shrink-0" />
+            <span>AI assistant is unavailable. Please edit the form fields directly.</span>
+          </div>
+        )}
         {(recordingError || ttsError) && (
           <div className="flex items-center mt-2 p-2 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded border border-red-200 dark:border-red-800">
             <AlertCircle size={14} className="mr-1 flex-shrink-0" />
@@ -242,7 +295,7 @@ Only respond with the JSON object if a change is requested, otherwise respond co
               }`}
             >
               {message.content}
-              {message.role === 'assistant' && index === messages.length - 1 && (
+              {message.role === 'assistant' && index === messages.length - 1 && aiProviderStatus.hasVoiceFeatures && (
                 <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 flex justify-end">
                   {isPlaying && (
                     <span className="flex items-center">
@@ -258,32 +311,25 @@ Only respond with the JSON object if a change is requested, otherwise respond co
         <div ref={messagesEndRef} />
       </div>
       
-      <form onSubmit={handleSubmit} className="border-t dark:border-gray-700 p-3 bg-white dark:bg-gray-800 flex items-center gap-2">
-        <input
-          type="text"
-          value={userInput}
-          onChange={(e) => setUserInput(e.target.value)}
-          disabled={isProcessing || isRecording || isTranscribing}
-          placeholder={isRecording ? "Recording..." : "Type your message or use voice recording..."}
-          className="flex-1 p-2 border dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:text-gray-500"
-        />
-        <Button 
-          type="submit" 
-          disabled={isProcessing || isRecording || isTranscribing || !userInput.trim()}
-          className="flex items-center"
-        >
-          {isProcessing ? (
-            <>
-              <Loader2 size={16} className="mr-1 animate-spin" />
-              <span>Processing...</span>
-            </>
-          ) : (
-            <>
-              <Send size={16} className="mr-1" />
-              <span>Send</span>
-            </>
-          )}
-        </Button>
+      <form onSubmit={handleSubmit} className="border-t dark:border-gray-700 p-4 bg-white dark:bg-gray-800">
+        <div className="flex items-center space-x-2">
+          <input
+            type="text"
+            value={userInput}
+            onChange={(e) => setUserInput(e.target.value)}
+            placeholder="Type your message..."
+            className="flex-1 border rounded-md px-3 py-2 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            disabled={isProcessing || aiProviderStatus.provider === AIProviderType.NONE}
+          />
+          <Button 
+            type="submit" 
+            size="sm"
+            disabled={!userInput.trim() || isProcessing || aiProviderStatus.provider === AIProviderType.NONE}
+            className="h-10 px-4"
+          >
+            {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          </Button>
+        </div>
       </form>
     </div>
   );

@@ -1,0 +1,57 @@
+{
+  "structured": {
+    "companyName": "Wayne Enterprises",
+    "industry": "Diversified",
+    "yearFounded": 1939,
+    "revenue": "$31.3B",
+    "employeeCount": 170000,
+    "location": {
+      "headquarters": "Gotham City",
+      "facilities": [
+        "Gotham City",
+        "Metropolis",
+        "New York, NY",
+        "London, UK",
+        "Hong Kong"
+      ]
+    },
+    "contactInfo": {
+      "primaryContact": "Lucius Fox",
+      "position": "CEO",
+      "phone": "555-BAT-CAVE",
+      "email": "lucius.fox@wayne.example"
+    }
+  },
+  "unstructured": [
+    {
+      "type": "transcript",
+      "date": "2023-08-25",
+      "content": "Wayne Enterprises is a global conglomerate with divisions in technology, biotech, defense contracting, shipping, manufacturing, and real estate. We need comprehensive coverage across all these sectors."
+    },
+    {
+      "type": "transcript",
+      "date": "2023-08-25",
+      "content": "Our R&D division has significant experimental technology that requires specialized coverage. Last year, we had an incident in our applied sciences division that resulted in a $12M claim."
+    },
+    {
+      "type": "transcript",
+      "date": "2023-08-25",
+      "content": "We currently maintain a $500M general liability policy with a $5M deductible. Our property insurance covers assets valued at over $100B across our global operations."
+    },
+    {
+      "type": "transcript",
+      "date": "2023-08-25",
+      "content": "Directors and officers liability is a particular concern given our size and public profile. We're looking to increase our D&O coverage from $250M to $500M."
+    },
+    {
+      "type": "transcript",
+      "date": "2023-08-25",
+      "content": "We're particularly interested in coverage for business interruption scenarios. Our current policy has a 72-hour waiting period, which we'd like to reduce to 24 hours if possible."
+    },
+    {
+      "type": "transcript",
+      "date": "2023-08-25",
+      "content": "We have a large global fleet of vehicles, including specialized transport for our defense and applied sciences divisions. We currently have auto liability coverage of $50M."
+    }
+  ]
+} 

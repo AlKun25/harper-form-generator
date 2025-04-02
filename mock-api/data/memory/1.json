@@ -1,0 +1,45 @@
+{
+  "structured": {
+    "companyName": "Acme Corporation",
+    "industry": "Manufacturing",
+    "yearFounded": 1985,
+    "revenue": "$25M",
+    "employeeCount": 250,
+    "location": {
+      "headquarters": "Chicago, IL",
+      "facilities": [
+        "Chicago, IL",
+        "Detroit, MI",
+        "Cleveland, OH"
+      ]
+    },
+    "contactInfo": {
+      "primaryContact": "John Smith",
+      "position": "CFO",
+      "phone": "555-123-4567",
+      "email": "john.smith@acme.example"
+    }
+  },
+  "unstructured": [
+    {
+      "type": "transcript",
+      "date": "2023-05-15",
+      "content": "We're looking for general liability coverage that would protect us from claims related to our manufacturing process. Our current policy is set to expire next month."
+    },
+    {
+      "type": "transcript",
+      "date": "2023-05-15",
+      "content": "We had one incident last year where an employee was injured while operating machinery, but our safety record overall is very good. The total claim amount was around $50,000."
+    },
+    {
+      "type": "transcript",
+      "date": "2023-05-15",
+      "content": "Our budget for insurance this year is approximately $120,000. We currently have general liability coverage of $2M and property insurance for our three facilities."
+    },
+    {
+      "type": "transcript",
+      "date": "2023-05-15",
+      "content": "We also want to ensure our commercial auto fleet is properly covered. We have 12 vehicles in total, mostly delivery trucks and some company cars."
+    }
+  ]
+} 

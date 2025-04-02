@@ -1,0 +1,48 @@
+{
+  "structured": {
+    "companyName": "Initech",
+    "industry": "Software",
+    "yearFounded": 1999,
+    "revenue": "$12M",
+    "employeeCount": 85,
+    "location": {
+      "headquarters": "Austin, TX",
+      "facilities": [
+        "Austin, TX"
+      ]
+    },
+    "contactInfo": {
+      "primaryContact": "Bill Lumbergh",
+      "position": "VP",
+      "phone": "555-TPS-RPTS",
+      "email": "bill.lumbergh@initech.example"
+    }
+  },
+  "unstructured": [
+    {
+      "type": "transcript",
+      "date": "2023-04-18",
+      "content": "We're a small software company specializing in financial transaction processing systems. We need appropriate professional liability coverage for software errors and omissions."
+    },
+    {
+      "type": "transcript",
+      "date": "2023-04-18",
+      "content": "Data security is a major concern since we handle financial information. We need a cyber liability policy that covers potential breaches and notification costs."
+    },
+    {
+      "type": "transcript",
+      "date": "2023-04-18",
+      "content": "We're currently carrying a $2M professional liability policy with a $25K deductible. We haven't had any claims in the past five years."
+    },
+    {
+      "type": "transcript",
+      "date": "2023-04-18",
+      "content": "Our office is leased, so we need appropriate coverage for our business property, primarily computer equipment and office furniture valued at approximately $750K."
+    },
+    {
+      "type": "transcript",
+      "date": "2023-04-18",
+      "content": "We're planning to expand our team by about 20 people in the next year, so we need to make sure our coverage scales appropriately with our growth."
+    }
+  ]
+} 

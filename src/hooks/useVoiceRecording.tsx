@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
+import aiProvider, { AIProviderType } from '@/lib/ai-services/ai-provider';
 
 interface UseVoiceRecordingProps {
   onTranscriptionComplete: (text: string) => void;
@@ -19,6 +20,11 @@ export default function useVoiceRecording({
 
   const startRecording = useCallback(async () => {
     try {
+      // First check if the AI provider supports voice features
+      if (aiProvider.getCurrentProvider() !== AIProviderType.OPENAI) {
+        throw new Error('Voice recording requires OpenAI to be available');
+      }
+      
       setError(null);
       setShouldAutoSubmit(false);
       audioChunksRef.current = [];
@@ -40,23 +46,12 @@ export default function useVoiceRecording({
         try {
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
           
-          // Create FormData to send the audio file
-          const formData = new FormData();
-          formData.append('audio', audioBlob, 'recording.webm');
-          
-          // Send the audio to the server for transcription
-          const response = await fetch('/api/speech-to-text', {
-            method: 'POST',
-            body: formData,
+          // Use the AI provider to transcribe the audio
+          const result = await aiProvider.transcribeAudio({
+            audioBlob
           });
           
-          const result = await response.json();
-          
-          if (!result.success) {
-            throw new Error(result.error || 'Failed to transcribe audio');
-          }
-          
-          const transcribedText = result.data.text;
+          const transcribedText = result.text;
           
           // Pass the transcribed text back
           onTranscriptionComplete(transcribedText);

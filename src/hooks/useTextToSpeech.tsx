@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import aiProvider, { AIProviderType } from '@/lib/ai-services/ai-provider';
 
 export default function useTextToSpeech() {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -19,28 +20,25 @@ export default function useTextToSpeech() {
     if (!text || !audioRef) return;
     
     try {
+      // First check if the AI provider supports voice features
+      if (aiProvider.getCurrentProvider() !== AIProviderType.OPENAI) {
+        throw new Error('Text-to-speech requires OpenAI to be available');
+      }
+      
       setError(null);
       setIsLoading(true);
       
       // Stop any playing audio first
       stopSpeech();
       
-      // Call the API to convert text to speech
-      const response = await fetch('/api/text-to-speech', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ text }),
+      // Call the AI provider for text-to-speech
+      const response = await aiProvider.textToSpeech({
+        text,
+        voice: 'nova'
       });
       
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to generate speech');
-      }
-      
-      // Get audio blob
-      const audioBlob = await response.blob();
+      // Create audio blob
+      const audioBlob = new Blob([response.audioBuffer], { type: 'audio/mpeg' });
       const audioUrl = URL.createObjectURL(audioBlob);
       
       // Set up the audio element
