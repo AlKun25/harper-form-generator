@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
-
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || '',
-});
+import aiProvider, { AIProviderType } from '@/lib/ai-services/ai-provider';
 
 export async function POST(request: NextRequest) {
   try {
+    // Check if we have an AI provider that supports voice
+    if (aiProvider.getCurrentProvider() !== AIProviderType.OPENAI) {
+      return NextResponse.json(
+        { success: false, error: 'Voice features are not available' },
+        { status: 503 }
+      );
+    }
+
     const formData = await request.formData();
     const audioFile = formData.get('audio') as File;
 
@@ -21,11 +24,11 @@ export async function POST(request: NextRequest) {
     // Convert the file to a Buffer
     const arrayBuffer = await audioFile.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
+    const blob = new Blob([buffer], { type: audioFile.type });
 
-    // Transcribe the audio using OpenAI Whisper
-    const transcription = await openai.audio.transcriptions.create({
-      file: new File([buffer], audioFile.name, { type: audioFile.type }),
-      model: 'whisper-1',
+    // Transcribe using the AI provider
+    const transcription = await aiProvider.transcribeAudio({
+      audioBlob: blob,
     });
 
     return NextResponse.json({
