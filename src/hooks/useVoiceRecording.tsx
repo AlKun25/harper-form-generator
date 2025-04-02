@@ -1,98 +1,155 @@
-import { useState, useCallback, useRef } from 'react';
-import aiProvider, { AIProviderType } from '@/lib/ai-services/ai-provider';
+import { useRef, useState, useCallback } from 'react';
 
-interface UseVoiceRecordingProps {
-  onTranscriptionComplete: (text: string) => void;
-  onAutoSubmit?: (text: string) => void;
+interface UseVoiceRecordingOptions {
+  onTranscriptionComplete?: (transcript: string) => void;
+  onTranscriptionStart?: () => void;
+  onError?: (error: string) => void;
+  debug?: boolean;
 }
 
-export default function useVoiceRecording({ 
-  onTranscriptionComplete, 
-  onAutoSubmit 
-}: UseVoiceRecordingProps) {
+export function useVoiceRecording({
+  onTranscriptionComplete,
+  onTranscriptionStart,
+  onError,
+  debug = false
+}: UseVoiceRecordingOptions = {}) {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [shouldAutoSubmit, setShouldAutoSubmit] = useState(false);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-
-  const startRecording = useCallback(async () => {
+  const streamRef = useRef<MediaStream | null>(null);
+  
+  // Stop all tracks in the current stream
+  const stopMediaTracks = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+  }, []);
+  
+  // Toggle recording function (press to start, press again to stop)
+  const toggleRecording = useCallback(async () => {
+    if (debug) {
+      console.log(`Voice Recording - Toggle recording. Current state: ${isRecording ? 'recording' : 'not recording'}`);
+    }
+    
+    // If currently recording, stop it
+    if (isRecording) {
+      if (mediaRecorderRef.current) {
+        if (debug) console.log('Voice Recording - Stopping recording');
+        mediaRecorderRef.current.stop();
+        setIsRecording(false);
+      }
+      return;
+    }
+    
+    // If not recording, start recording
     try {
-      // First check if the AI provider supports voice features
-      if (aiProvider.getCurrentProvider() !== AIProviderType.OPENAI) {
-        throw new Error('Voice recording requires OpenAI to be available');
+      setError(null);
+      
+      // Stop any existing media tracks first
+      stopMediaTracks();
+      
+      // Request microphone access
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      
+      if (onTranscriptionStart) {
+        onTranscriptionStart();
       }
       
-      setError(null);
-      setShouldAutoSubmit(false);
-      audioChunksRef.current = [];
-
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Create new MediaRecorder
       const mediaRecorder = new MediaRecorder(stream);
-      
       mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+      
+      // Handle data as it becomes available
       mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
+        audioChunksRef.current.push(event.data);
       };
-
+      
+      // Handle recording stop
       mediaRecorder.onstop = async () => {
-        setIsRecording(false);
+        if (debug) console.log('Voice Recording - Recording stopped');
+        
+        // Update UI state
         setIsProcessing(true);
         
         try {
+          // Create audio blob from chunks
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
           
-          // Use the AI provider to transcribe the audio
-          const result = await aiProvider.transcribeAudio({
-            audioBlob
+          if (debug) {
+            console.log(`Voice Recording - Audio recorded, size: ${audioBlob.size} bytes`);
+          }
+          
+          // Stop all tracks in the stream to release the microphone
+          stopMediaTracks();
+          
+          // Skip processing if we got no audio data
+          if (audioBlob.size === 0) {
+            throw new Error('No audio recorded');
+          }
+          
+          // Create FormData to send to API
+          const formData = new FormData();
+          formData.append('file', audioBlob, 'recording.webm');
+          
+          // Send to transcription API
+          if (debug) console.log('Voice Recording - Sending to transcription API');
+          const response = await fetch('/api/transcribe', {
+            method: 'POST',
+            body: formData
           });
           
-          const transcribedText = result.text;
-          
-          // Pass the transcribed text back
-          onTranscriptionComplete(transcribedText);
-          
-          // If autoSubmit is enabled and we have a callback, call it with the transcribed text
-          if (shouldAutoSubmit && onAutoSubmit && transcribedText.trim()) {
-            onAutoSubmit(transcribedText);
+          if (!response.ok) {
+            throw new Error(`Error from transcription API: ${response.status}`);
           }
-        } catch (error) {
-          console.error('Error processing audio:', error);
-          setError(error instanceof Error ? error.message : 'An unknown error occurred');
+          
+          const data = await response.json();
+          
+          if (debug) {
+            console.log('Voice Recording - Transcription received:', data);
+          }
+          
+          if (data.text && onTranscriptionComplete) {
+            onTranscriptionComplete(data.text);
+          }
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : 'Unknown error during transcription';
+          if (debug) console.error('Voice Recording - Error:', errorMessage);
+          setError(errorMessage);
+          if (onError) onError(errorMessage);
         } finally {
           setIsProcessing(false);
+          mediaRecorderRef.current = null;
         }
-        
-        // Stop all audio tracks
-        stream.getTracks().forEach((track) => track.stop());
       };
-
+      
+      // Start recording
       mediaRecorder.start();
       setIsRecording(true);
-    } catch (error) {
-      console.error('Error starting recording:', error);
-      setError(error instanceof Error ? error.message : 'Failed to access microphone');
+      
+      if (debug) console.log('Voice Recording - Recording started');
+      
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Could not access microphone';
+      if (debug) console.error('Voice Recording - Error:', errorMessage);
+      setError(errorMessage);
+      if (onError) onError(errorMessage);
+      
+      // Ensure we're not stuck in recording state
+      setIsRecording(false);
+      setIsProcessing(false);
     }
-  }, [onTranscriptionComplete, onAutoSubmit]);
-
-  const stopRecording = useCallback((autoSubmit = false) => {
-    if (mediaRecorderRef.current && isRecording) {
-      // Set auto submit flag before stopping the recording
-      setShouldAutoSubmit(autoSubmit);
-      mediaRecorderRef.current.stop();
-      // Note: the onstop event will handle the rest
-    }
-  }, [isRecording]);
-
+  }, [isRecording, onTranscriptionComplete, onTranscriptionStart, onError, stopMediaTracks, debug]);
+  
   return {
     isRecording,
     isProcessing,
     error,
-    startRecording,
-    stopRecording
+    toggleRecording
   };
 } 

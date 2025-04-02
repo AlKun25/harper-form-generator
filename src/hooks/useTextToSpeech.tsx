@@ -1,65 +1,98 @@
-import { useState, useCallback } from 'react';
-import aiProvider, { AIProviderType } from '@/lib/ai-services/ai-provider';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
-export default function useTextToSpeech() {
+interface UseTextToSpeechOptions {
+  debug?: boolean;
+}
+
+export default function useTextToSpeech({ debug = false }: UseTextToSpeechOptions = {}) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  const audioRef = typeof Audio !== 'undefined' ? new Audio() : null;
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  
+  // Cleanup audio element when component unmounts
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, []);
 
+  // Stop playback
   const stopSpeech = useCallback(() => {
-    if (audioRef) {
-      audioRef.pause();
-      audioRef.currentTime = 0;
-      setIsPlaying(false);
+    if (debug) console.log('TTS - Stopping speech');
+    
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
     }
-  }, [audioRef]);
+    
+    setIsPlaying(false);
+  }, [debug]);
 
+  // Speak the provided text
   const speakText = useCallback(async (text: string) => {
-    if (!text || !audioRef) return;
+    if (!text || !text.trim()) return;
+    
+    if (debug) console.log('TTS - Speaking text:', text.substring(0, 50) + '...');
+    
+    // Stop any current playback
+    stopSpeech();
+    
+    // Reset state
+    setError(null);
+    setIsLoading(true);
     
     try {
-      // First check if the AI provider supports voice features
-      if (aiProvider.getCurrentProvider() !== AIProviderType.OPENAI) {
-        throw new Error('Text-to-speech requires OpenAI to be available');
-      }
-      
-      setError(null);
-      setIsLoading(true);
-      
-      // Stop any playing audio first
-      stopSpeech();
-      
-      // Call the AI provider for text-to-speech
-      const response = await aiProvider.textToSpeech({
-        text,
-        voice: 'nova'
+      // Call the API to convert text to speech
+      const response = await fetch('/api/text-to-speech', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
       });
       
-      // Create audio blob
-      const audioBlob = new Blob([response.audioBuffer], { type: 'audio/mpeg' });
-      const audioUrl = URL.createObjectURL(audioBlob);
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
       
-      // Set up the audio element
-      audioRef.src = audioUrl;
-      audioRef.onended = () => {
+      // Get the audio blob from the response
+      const audioBlob = await response.blob();
+      
+      if (debug) console.log(`TTS - Received audio, size: ${audioBlob.size} bytes`);
+      
+      if (audioBlob.size === 0) {
+        throw new Error('Received empty audio response');
+      }
+      
+      // Create audio element
+      const audio = new Audio(URL.createObjectURL(audioBlob));
+      audioRef.current = audio;
+      
+      // Set up event handlers
+      audio.onplay = () => setIsPlaying(true);
+      audio.onended = () => setIsPlaying(false);
+      audio.onpause = () => setIsPlaying(false);
+      audio.onerror = (e) => {
+        console.error('Audio playback error:', e);
+        setError('Failed to play audio');
         setIsPlaying(false);
-        URL.revokeObjectURL(audioUrl);
       };
       
-      // Play the audio
-      await audioRef.play();
-      setIsPlaying(true);
+      // Start playback
+      await audio.play();
       
-    } catch (error) {
-      console.error('Error generating speech:', error);
-      setError(error instanceof Error ? error.message : 'Failed to generate speech');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Text-to-speech failed';
+      console.error('TTS error:', errorMessage);
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
-  }, [audioRef, stopSpeech]);
-
+  }, [debug, stopSpeech]);
+  
   return {
     isPlaying,
     isLoading,

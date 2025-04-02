@@ -39,24 +39,36 @@ export interface UnstructuredData {
 
 // Form types
 export interface InsuranceForm {
-  companyName: string;
-  address: string;
-  city: string;
-  state: string;
-  zipCode: string;
-  industry: string;
-  employeeCount: number;
-  annualRevenue: number;
-  yearFounded: number;
-  deductibleAmount: number;
-  coverageLimit: number;
-  effectiveDate: string;
-  expirationDate: string;
-  premiumAmount: number;
-  contactName: string;
-  contactEmail: string;
-  contactPhone: string;
-  additionalNotes: string;
+  companyName?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  industry?: string;
+  employeeCount?: number;
+  annualRevenue?: number;
+  yearFounded?: number;
+  deductibleAmount?: number;
+  coverageLimit?: number;
+  effectiveDate?: string;
+  expirationDate?: string;
+  premiumAmount?: number;
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  additionalNotes?: string;
+  [key: string]: any; // Allow for dynamic field access
+}
+
+// Form template types
+export interface FormInstance {
+  id: string;
+  name: string;
+  description?: string;
+  type: string;
+  dateCreated: string;
+  dateModified: string;
+  formData: InsuranceForm;
 }
 
 // API Response types
