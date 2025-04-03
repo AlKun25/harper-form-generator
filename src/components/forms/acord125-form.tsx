@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, ReactNode, useEffect } from 'react';
 import { ACORD125Form } from '@/types/acord125';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -15,27 +15,47 @@ interface ACORD125FormProps {
 
 export function ACORD125FormComponent({ formData, onEditForm }: ACORD125FormProps) {
   const [editing, setEditing] = useState(false);
-  const [formState, setFormState] = useState(formData);
+  const [formState, setFormState] = useState<ACORD125Form>(formData);
+
+  // Update formState when formData changes
+  useEffect(() => {
+    console.log('ACORD125Form: Parent form data changed', formData);
+    console.log('ACORD125Form: Setting new state');
+    
+    // Create a new object to trigger re-render
+    const newState = JSON.parse(JSON.stringify(formData));
+    setFormState(newState);
+    
+    // If editing, set to false to reset the editing state
+    if (editing) {
+      console.log('ACORD125Form: Resetting edit mode');
+      setEditing(false);
+    }
+  }, [formData]);
 
   const handleEdit = () => {
+    console.log('ACORD125Form: Entering edit mode');
     setEditing(true);
   };
 
   const handleSave = () => {
+    console.log('ACORD125Form: Saving changes', formState);
     onEditForm(formState);
     setEditing(false);
   };
 
   const handleCancel = () => {
+    console.log('ACORD125Form: Cancelling changes');
     setFormState(formData);
     setEditing(false);
   };
 
   const handleChange = (path: string[], value: any) => {
-    const newState = { ...formState };
-    let current = newState;
+    // Create a deep copy of the current form state
+    const newState = JSON.parse(JSON.stringify(formState));
     
-    // Navigate to the nested property
+    // Navigate to the nested property and set the value
+    let current = newState;
     for (let i = 0; i < path.length - 1; i++) {
       if (current[path[i]] === undefined) {
         current[path[i]] = {};
@@ -43,9 +63,41 @@ export function ACORD125FormComponent({ formData, onEditForm }: ACORD125FormProp
       current = current[path[i]];
     }
     
-    // Set the value
+    // Set the final property value
     current[path[path.length - 1]] = value;
+    
+    // Update local state
     setFormState(newState);
+    
+    // Immediately update the parent form
+    onEditForm(newState);
+  };
+
+  const Section = ({ title, children }: { title: string; children: ReactNode }) => {
+    // Create a slug version of the title for use in IDs
+    const sectionSlug = title.toLowerCase().replace(/\s+/g, '-');
+    
+    // Create a wrapper div to properly handle the data-section prop
+    return (
+      <Card className="mb-6">
+        <CardHeader className="py-4">
+          <CardTitle className="text-lg">{title}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div data-section={sectionSlug}>
+            {children}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  // Premises Information fields need special handling for numeric values
+  const isPremisesNumericField = (path: string[]): boolean => {
+    return path.length >= 3 && 
+           path[0] === 'premises_information' && 
+           path[1] === 'location' && 
+           ['full_time_employees', 'part_time_employees', 'annual_revenues'].includes(path[2]);
   };
 
   const Field = ({ 
@@ -54,7 +106,7 @@ export function ACORD125FormComponent({ formData, onEditForm }: ACORD125FormProp
     type = 'text',
     placeholder = '',
     readOnly = !editing,
-    className = ''
+    className = '',
   }: { 
     label: string; 
     path: string[]; 
@@ -67,7 +119,7 @@ export function ACORD125FormComponent({ formData, onEditForm }: ACORD125FormProp
     let value: any = formState;
     for (const key of path) {
       if (value === undefined) break;
-      value = value[key];
+      value = value[key as keyof typeof value];
     }
     
     // Handle value types
@@ -75,18 +127,39 @@ export function ACORD125FormComponent({ formData, onEditForm }: ACORD125FormProp
       value = value ? parseFloat(value) || 0 : 0;
     }
     
+    // Get the section ID from closest ancestor
+    const getSectionId = () => {
+      // In a real implementation, this would use DOM traversal
+      // For our simple case, we'll use the path's first segment as a fallback
+      return path[0] || '';
+    };
+    
+    // Create a field ID that combines section ID and field label
+    const fieldId = `${getSectionId()}-${label.toLowerCase().replace(/\s+/g, '-')}`;
+    
     // Return the appropriate field based on type
     switch (type) {
       case 'textarea':
         return (
           <div className={cn("mb-4", className)}>
-            <Label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</Label>
+            <Label htmlFor={fieldId} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</Label>
             <Textarea 
+              id={fieldId}
               placeholder={placeholder}
               value={value || ''}
               readOnly={readOnly}
               className={cn("w-full", readOnly && "bg-gray-50 dark:bg-gray-800")}
               onChange={(e) => handleChange(path, e.target.value)}
+              data-field-path={path.join('.')}
+              // Keep focus until user explicitly clicks away
+              onBlur={(e) => {
+                // If the focus is moving to another element within the form, let the focus change happen
+                if (e.relatedTarget && e.relatedTarget.closest('form')) {
+                  return;
+                }
+                // Otherwise, keep focus on this input
+                if (!readOnly) e.target.focus();
+              }}
             />
           </div>
         );
@@ -94,13 +167,14 @@ export function ACORD125FormComponent({ formData, onEditForm }: ACORD125FormProp
         return (
           <div className={cn("flex items-center gap-2 mb-4", className)}>
             <Checkbox 
-              id={path.join('.')}
+              id={fieldId}
               checked={!!value}
               disabled={readOnly}
               onCheckedChange={(checked) => handleChange(path, !!checked)}
+              data-field-path={path.join('.')}
             />
             <Label 
-              htmlFor={path.join('.')}
+              htmlFor={fieldId}
               className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer"
             >
               {label}
@@ -110,35 +184,38 @@ export function ACORD125FormComponent({ formData, onEditForm }: ACORD125FormProp
       default:
         return (
           <div className={cn("mb-4", className)}>
-            <Label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</Label>
+            <Label htmlFor={fieldId} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</Label>
             <Input 
+              id={fieldId}
               type={type}
               placeholder={placeholder}
               value={type === 'number' ? (value || 0) : (value || '')}
               readOnly={readOnly}
               className={cn("w-full", readOnly && "bg-gray-50 dark:bg-gray-800")}
               onChange={(e) => {
+                // Handle number inputs specially
                 const newValue = type === 'number' 
-                  ? parseFloat(e.target.value) 
+                  ? (parseFloat(e.target.value) || 0) 
                   : e.target.value;
+                
+                // Update form with the new value
                 handleChange(path, newValue);
+              }}
+              data-field-path={path.join('.')}
+              // Keep focus until user explicitly clicks away
+              onBlur={(e) => {
+                // If the focus is moving to another element within the form, let the focus change happen
+                if (e.relatedTarget && e.relatedTarget.closest('form')) {
+                  return;
+                }
+                // Otherwise, keep focus on this input
+                if (!readOnly) e.target.focus();
               }}
             />
           </div>
         );
     }
   };
-
-  const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
-    <Card className="mb-6">
-      <CardHeader className="py-4">
-        <CardTitle className="text-lg">{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {children}
-      </CardContent>
-    </Card>
-  );
 
   return (
     <div className="space-y-6">
@@ -216,9 +293,21 @@ export function ACORD125FormComponent({ formData, onEditForm }: ACORD125FormProp
           <Field label="City" path={['premises_information', 'location', 'city']} />
           <Field label="State" path={['premises_information', 'location', 'state']} />
           <Field label="ZIP" path={['premises_information', 'location', 'zip']} />
-          <Field label="Full Time Employees" path={['premises_information', 'location', 'full_time_employees']} type="number" />
-          <Field label="Part Time Employees" path={['premises_information', 'location', 'part_time_employees']} type="number" />
-          <Field label="Annual Revenues" path={['premises_information', 'location', 'annual_revenues']} type="number" />
+          <Field 
+            label="Full Time Employees" 
+            path={['premises_information', 'location', 'full_time_employees']} 
+            type="number" 
+          />
+          <Field 
+            label="Part Time Employees" 
+            path={['premises_information', 'location', 'part_time_employees']} 
+            type="number" 
+          />
+          <Field 
+            label="Annual Revenues" 
+            path={['premises_information', 'location', 'annual_revenues']} 
+            type="number" 
+          />
           <Field 
             label="Description of Operations" 
             path={['premises_information', 'location', 'description_of_operations']} 
@@ -286,25 +375,25 @@ export function ACORD125FormComponent({ formData, onEditForm }: ACORD125FormProp
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <Field 
                       label="Date of Occurrence" 
-                      path={['loss_history', 'claims', index, 'date_of_occurrence']} 
+                      path={['loss_history', 'claims', `${index}`, 'date_of_occurrence']} 
                     />
                     <Field 
                       label="Status" 
-                      path={['loss_history', 'claims', index, 'status']} 
+                      path={['loss_history', 'claims', `${index}`, 'status']} 
                     />
                     <Field 
                       label="Amount Paid" 
-                      path={['loss_history', 'claims', index, 'amount_paid']} 
+                      path={['loss_history', 'claims', `${index}`, 'amount_paid']} 
                       type="number" 
                     />
                     <Field 
                       label="Amount Reserved" 
-                      path={['loss_history', 'claims', index, 'amount_reserved']} 
+                      path={['loss_history', 'claims', `${index}`, 'amount_reserved']} 
                       type="number" 
                     />
                     <Field 
                       label="Description" 
-                      path={['loss_history', 'claims', index, 'description']} 
+                      path={['loss_history', 'claims', `${index}`, 'description']} 
                       type="textarea" 
                       className="col-span-1 md:col-span-2"
                     />

@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { mapMemoryToACORD125 } from '@/utils/acord125-mapper';
+import { mapMemoryToACORD126 } from '@/utils/acord126-mapper';
 import { ACORD125Form } from '@/types/acord125';
+import { ACORD126Form } from '@/types/acord126';
 
 export async function POST(request: NextRequest) {
   try {
-    // Get company ID from request body
+    // Get company ID and form type from request body
     const body = await request.json();
-    const companyId = body.companyId;
+    const { companyId, formType = 'acord125' } = body;
 
     if (!companyId) {
       return NextResponse.json(
@@ -15,7 +17,7 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    console.log(`Generating form for company ID: ${companyId}`);
+    console.log(`Generating ${formType} form for company ID: ${companyId}`);
 
     // Fetch company memory from our memory API
     const memoryApiUrl = `${request.nextUrl.origin}/api/memory?companyId=${companyId}`;
@@ -49,46 +51,53 @@ export async function POST(request: NextRequest) {
     
     console.log('Memory API response structure:', JSON.stringify(Object.keys(memoryData), null, 2));
     
-    // Map memory data to ACORD 125 form
-    let formData: ACORD125Form;
+    // Check if we received a valid memory structure
+    if (!memoryData.data) {
+      console.warn('Memory API returned success but no data property found');
+      return NextResponse.json(
+        { success: false, error: 'Memory data is empty or invalid' },
+        { status: 500 }
+      );
+    }
+    
+    // Log memory data structure 
+    console.log('Memory data structure:', {
+      hasCompany: !!memoryData.data.company,
+      hasCompanyJson: !!memoryData.data.company?.json,
+      hasCompanyData: !!memoryData.data.company?.json?.company,
+      hasFacts: !!memoryData.data.facts || !!memoryData.data.company?.json?.facts,
+      hasPhoneEvents: !!memoryData.data.phone_events || !!memoryData.data.company?.phone_events,
+    });
+    
+    // Select and use the appropriate mapper based on formType
     try {
-      // Check if we received a valid memory structure
-      if (!memoryData.data) {
-        console.warn('Memory API returned success but no data property found');
-        return NextResponse.json(
-          { success: false, error: 'Memory data is empty or invalid' },
-          { status: 500 }
-        );
+      let formData: ACORD125Form | ACORD126Form;
+      
+      if (formType.toLowerCase() === 'acord126') {
+        formData = mapMemoryToACORD126(memoryData.data);
+        console.log('Successfully mapped memory data to ACORD126 form');
+      } else {
+        // Default to ACORD125
+        formData = mapMemoryToACORD125(memoryData.data);
+        console.log('Successfully mapped memory data to ACORD125 form');
       }
       
-      // Log memory data structure 
-      console.log('Memory data structure:', {
-        hasCompany: !!memoryData.data.company,
-        hasCompanyJson: !!memoryData.data.company?.json,
-        hasCompanyData: !!memoryData.data.company?.json?.company,
-        hasFacts: !!memoryData.data.facts || !!memoryData.data.company?.json?.facts,
-        hasPhoneEvents: !!memoryData.data.phone_events || !!memoryData.data.company?.phone_events,
+      return NextResponse.json({
+        success: true,
+        data: formData,
+        formType: formType.toLowerCase()
       });
-      
-      // Pass the actual memory data to the mapper
-      formData = mapMemoryToACORD125(memoryData.data);
-      
-      console.log('Successfully mapped memory data to ACORD125 form');
     } catch (error) {
-      console.error('Error mapping memory data to ACORD 125 form:', error);
+      console.error(`Error mapping memory data to ${formType} form:`, error);
       
       // Return partial data for debugging
       return NextResponse.json({
         success: false, 
         error: `Error mapping data: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        partial_data: memoryData // Include raw data for debugging
+        partial_data: memoryData, // Include raw data for debugging
+        formType: formType.toLowerCase()
       }, { status: 500 });
     }
-
-    return NextResponse.json({
-      success: true,
-      data: formData
-    });
   } catch (error) {
     console.error('Error generating form:', error);
     return NextResponse.json(

@@ -347,21 +347,72 @@ export function mapMemoryToACORD126(memory: Memory): ACORD126Form {
     return locations;
   };
   
+  // Extract carrier information from facts and events
+  const extractCarrierInfo = () => {
+    let name = "";
+    let policy_number = "";
+    
+    // Try to find carrier info in facts
+    for (const fact of facts) {
+      const content = fact.fact || fact.content || "";
+      if (content.toLowerCase().includes("carrier") || content.toLowerCase().includes("insurance company")) {
+        const companies = ["Liberty Mutual", "Travelers", "Chubb", "Hartford", "CNA", "Zurich"];
+        for (const company of companies) {
+          if (content.includes(company)) {
+            name = company;
+            break;
+          }
+        }
+      }
+      
+      if (content.toLowerCase().includes("policy number") || content.toLowerCase().includes("policy #")) {
+        const match = content.match(/(policy number|policy #|policy)\s*[:#]?\s*([a-zA-Z0-9-]+)/i);
+        if (match) {
+          policy_number = match[2];
+        }
+      }
+    }
+    
+    return { name, policy_number };
+  };
+  
+  // Get carrier info from facts or events
+  const carrier_info = extractCarrierInfo();
+  const carrier_name = carrier_info.name;
+  const policy_number = carrier_info.policy_number;
+  
+  // Extract liability limits
+  const liability_limits = extractLiabilityLimits();
+  
+  // Extract loss history
+  const loss_history = extractLossHistory();
+  
+  // Extract subcontractor info
+  const contractor_info = extractSubcontractorInfo();
+  
+  // Extract locations
+  const locations = extractLocations();
+  
+  // Helper functions
+  const getCompanyId = () => {
+    return company.id ? String(company.id) : '';
+  };
+  
   // Map fields from memory to the ACORD 126 form
   return {
     date: new Date().toISOString().split('T')[0],
     agency: {
-      name: "",
+      name: "Harper Insurance",
       contact_name: "",
       phone: "",
       fax: "",
       email: "",
-      agency_customer_id: "",
+      agency_customer_id: getCompanyId(),
     },
     carrier: {
-      name: "",
+      name: carrier_name || "",
       naic_code: "",
-      policy_number: "",
+      policy_number: policy_number || "",
     },
     status_of_transaction: {
       transaction_type: "New Business",
@@ -379,16 +430,21 @@ export function mapMemoryToACORD126(memory: Memory): ACORD126Form {
         website_address: company.company_website || "",
       },
     },
+    contact_information: {
+      contact_name: `${contact.contact_first_name || ''} ${contact.contact_last_name || ''}`.trim(),
+      primary_phone: contact.contact_primary_phone || company.company_primary_phone || '',
+      primary_email: contact.contact_primary_email || company.company_primary_email || ''
+    },
     policy_information: {
       proposed_eff_date: "",
       proposed_exp_date: "",
-      limits_of_liability: extractLiabilityLimits(),
+      limits_of_liability: liability_limits,
       deductible: {
         type: "",
         amount: "",
       },
     },
-    locations: extractLocations(),
+    locations: locations,
     classifications: [{
       location_number: "1",
       classification_description: company.company_description || "",
@@ -408,7 +464,7 @@ export function mapMemoryToACORD126(memory: Memory): ACORD126Form {
       retroactive_date: "",
       other_coverages: [],
     },
-    contractor_information: extractSubcontractorInfo(),
+    contractor_information: contractor_info,
     additional_questions: {
       has_discontinued_products: false,
       details_discontinued_products: "",
@@ -421,7 +477,7 @@ export function mapMemoryToACORD126(memory: Memory): ACORD126Form {
       has_independent_contractors: false,
       details_independent_contractors: "",
     },
-    loss_history: extractLossHistory(),
+    loss_history: loss_history,
     remarks: "",
   };
 }
@@ -432,9 +488,9 @@ export function mapMemoryToACORD126(memory: Memory): ACORD126Form {
  */
 function createEmptyACORD126Form(): ACORD126Form {
   return {
-    date: "",
+    date: new Date().toISOString().split('T')[0],
     agency: {
-      name: "",
+      name: "Harper Insurance",
       contact_name: "",
       phone: "",
       fax: "",
@@ -447,7 +503,7 @@ function createEmptyACORD126Form(): ACORD126Form {
       policy_number: "",
     },
     status_of_transaction: {
-      transaction_type: "",
+      transaction_type: "New Business",
     },
     applicant_information: {
       named_insured: {
@@ -461,6 +517,11 @@ function createEmptyACORD126Form(): ACORD126Form {
         business_phone: "",
         website_address: "",
       },
+    },
+    contact_information: {
+      contact_name: "",
+      primary_phone: "",
+      primary_email: "",
     },
     policy_information: {
       proposed_eff_date: "",

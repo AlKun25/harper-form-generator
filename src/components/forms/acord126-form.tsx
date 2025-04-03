@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, ReactNode, useEffect } from 'react';
 import { ACORD126Form } from '@/types/acord126';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -17,35 +17,78 @@ export function ACORD126FormComponent({ formData, onEditForm }: ACORD126FormProp
   const [editing, setEditing] = useState(false);
   const [formState, setFormState] = useState(formData);
 
+  // Update formState when formData changes
+  useEffect(() => {
+    console.log('ACORD126Form: Parent form data changed', formData);
+    console.log('ACORD126Form: Setting new state');
+    
+    // Create a new object to trigger re-render
+    const newState = JSON.parse(JSON.stringify(formData));
+    setFormState(newState);
+    
+    // If editing, set to false to reset the editing state
+    if (editing) {
+      console.log('ACORD126Form: Resetting edit mode');
+      setEditing(false);
+    }
+  }, [formData]);
+
   const handleEdit = () => {
+    console.log('ACORD126Form: Entering edit mode');
     setEditing(true);
   };
 
   const handleSave = () => {
+    console.log('ACORD126Form: Saving changes', formState);
     onEditForm(formState);
     setEditing(false);
   };
 
   const handleCancel = () => {
+    console.log('ACORD126Form: Cancelling changes');
     setFormState(formData);
     setEditing(false);
   };
 
   const handleChange = (path: string[], value: any) => {
-    const newState = { ...formState } as Record<string, any>;
-    let current: Record<string, any> = newState;
+    // Create a deep copy of the current form state
+    const newState = JSON.parse(JSON.stringify(formState));
     
-    // Navigate to the nested property
+    // Navigate to the nested property and set the value
+    let current = newState;
     for (let i = 0; i < path.length - 1; i++) {
       if (current[path[i]] === undefined) {
         current[path[i]] = {};
       }
-      current = current[path[i]] as Record<string, any>;
+      current = current[path[i]];
     }
     
-    // Set the value
+    // Set the final property value
     current[path[path.length - 1]] = value;
-    setFormState(newState as ACORD126Form);
+    
+    // Update local state
+    setFormState(newState);
+    
+    // Immediately update the parent form
+    onEditForm(newState);
+  };
+
+  const Section = ({ title, children }: { title: string; children: ReactNode }) => {
+    // Create a slug version of the title for use in IDs
+    const sectionSlug = title.toLowerCase().replace(/\s+/g, '-');
+    
+    return (
+      <Card className="mb-6">
+        <CardHeader className="py-4">
+          <CardTitle className="text-lg">{title}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div data-section={sectionSlug}>
+            {children}
+          </div>
+        </CardContent>
+      </Card>
+    );
   };
 
   const Field = ({ 
@@ -75,18 +118,34 @@ export function ACORD126FormComponent({ formData, onEditForm }: ACORD126FormProp
       value = value ? parseFloat(value) || 0 : 0;
     }
     
+    // Get the section ID from the path's first segment as a fallback
+    const getSectionId = () => {
+      return path[0] || '';
+    };
+    
+    // Create a field ID that combines section ID and field label
+    const fieldId = `${getSectionId()}-${label.toLowerCase().replace(/\s+/g, '-')}`;
+    
     // Return the appropriate field based on type
     switch (type) {
       case 'textarea':
         return (
           <div className={cn("mb-4", className)}>
-            <Label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</Label>
+            <Label htmlFor={fieldId} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</Label>
             <Textarea 
+              id={fieldId}
               placeholder={placeholder}
               value={value || ''}
               readOnly={readOnly}
               className={cn("w-full", readOnly && "bg-gray-50 dark:bg-gray-800")}
               onChange={(e) => handleChange(path, e.target.value)}
+              data-field-path={path.join('.')}
+              onBlur={(e) => {
+                if (e.relatedTarget && e.relatedTarget.closest('form')) {
+                  return;
+                }
+                if (!readOnly) e.target.focus();
+              }}
             />
           </div>
         );
@@ -94,13 +153,14 @@ export function ACORD126FormComponent({ formData, onEditForm }: ACORD126FormProp
         return (
           <div className={cn("flex items-center gap-2 mb-4", className)}>
             <Checkbox 
-              id={path.join('.')}
+              id={fieldId}
               checked={!!value}
               disabled={readOnly}
               onCheckedChange={(checked) => handleChange(path, !!checked)}
+              data-field-path={path.join('.')}
             />
             <Label 
-              htmlFor={path.join('.')}
+              htmlFor={fieldId}
               className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer"
             >
               {label}
@@ -110,8 +170,9 @@ export function ACORD126FormComponent({ formData, onEditForm }: ACORD126FormProp
       default:
         return (
           <div className={cn("mb-4", className)}>
-            <Label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</Label>
+            <Label htmlFor={fieldId} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</Label>
             <Input 
+              id={fieldId}
               type={type}
               placeholder={placeholder}
               value={type === 'number' ? (value || 0) : (value || '')}
@@ -123,22 +184,18 @@ export function ACORD126FormComponent({ formData, onEditForm }: ACORD126FormProp
                   : e.target.value;
                 handleChange(path, newValue);
               }}
+              data-field-path={path.join('.')}
+              onBlur={(e) => {
+                if (e.relatedTarget && e.relatedTarget.closest('form')) {
+                  return;
+                }
+                if (!readOnly) e.target.focus();
+              }}
             />
           </div>
         );
     }
   };
-
-  const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
-    <Card className="mb-6">
-      <CardHeader className="py-4">
-        <CardTitle className="text-lg">{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {children}
-      </CardContent>
-    </Card>
-  );
 
   return (
     <div className="space-y-6">
@@ -182,6 +239,15 @@ export function ACORD126FormComponent({ formData, onEditForm }: ACORD126FormProp
         </div>
       </Section>
 
+      {/* Contact Information */}
+      <Section title="Contact Information">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Field label="Contact Name" path={['contact_information', 'contact_name']} />
+          <Field label="Phone Number" path={['contact_information', 'primary_phone']} type="tel" />
+          <Field label="Email" path={['contact_information', 'primary_email']} type="email" />
+        </div>
+      </Section>
+
       {/* Policy Information */}
       <Section title="Policy Information">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -208,12 +274,12 @@ export function ACORD126FormComponent({ formData, onEditForm }: ACORD126FormProp
           <div key={index} className="mb-6 pb-6 border-b border-gray-200 dark:border-gray-700 last:border-b-0 last:mb-0 last:pb-0">
             <h3 className="text-md font-semibold mb-4">Location {location.location_number}</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Field label="Location Number" path={['locations', index, 'location_number']} />
-              <Field label="Street Address" path={['locations', index, 'street_address']} />
-              <Field label="City" path={['locations', index, 'city']} />
-              <Field label="State" path={['locations', index, 'state']} />
-              <Field label="ZIP Code" path={['locations', index, 'zip']} />
-              <Field label="Interest" path={['locations', index, 'interest']} />
+              <Field label="Location Number" path={['locations', `${index}`, 'location_number']} />
+              <Field label="Street Address" path={['locations', `${index}`, 'street_address']} />
+              <Field label="City" path={['locations', `${index}`, 'city']} />
+              <Field label="State" path={['locations', `${index}`, 'state']} />
+              <Field label="ZIP Code" path={['locations', `${index}`, 'zip']} />
+              <Field label="Interest" path={['locations', `${index}`, 'interest']} />
             </div>
             
             {location.additional_interests && location.additional_interests.length > 0 && (
@@ -222,11 +288,11 @@ export function ACORD126FormComponent({ formData, onEditForm }: ACORD126FormProp
                 {location.additional_interests.map((interest, interestIndex) => (
                   <div key={interestIndex} className="pl-4 mb-4 border-l-2 border-gray-200 dark:border-gray-700">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Field label="Name" path={['locations', index, 'additional_interests', interestIndex, 'name']} />
-                      <Field label="Interest Type" path={['locations', index, 'additional_interests', interestIndex, 'interest_type']} />
+                      <Field label="Name" path={['locations', `${index}`, 'additional_interests', `${interestIndex}`, 'name']} />
+                      <Field label="Interest Type" path={['locations', `${index}`, 'additional_interests', `${interestIndex}`, 'interest_type']} />
                       <Field 
                         label="Certificate Required" 
-                        path={['locations', index, 'additional_interests', interestIndex, 'certificate_required']} 
+                        path={['locations', `${index}`, 'additional_interests', `${interestIndex}`, 'certificate_required']} 
                         type="checkbox" 
                       />
                     </div>
@@ -243,14 +309,14 @@ export function ACORD126FormComponent({ formData, onEditForm }: ACORD126FormProp
         {formState.classifications.map((classification, index) => (
           <div key={index} className="mb-6 pb-6 border-b border-gray-200 dark:border-gray-700 last:border-b-0 last:mb-0 last:pb-0">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Field label="Location Number" path={['classifications', index, 'location_number']} />
-              <Field label="Classification Description" path={['classifications', index, 'classification_description']} />
-              <Field label="Class Code" path={['classifications', index, 'class_code']} />
-              <Field label="Premium Basis" path={['classifications', index, 'premium_basis']} />
-              <Field label="Exposure" path={['classifications', index, 'exposure']} />
-              <Field label="Territory" path={['classifications', index, 'territory']} />
-              <Field label="Rate" path={['classifications', index, 'rate']} />
-              <Field label="Premium" path={['classifications', index, 'premium']} />
+              <Field label="Location Number" path={['classifications', `${index}`, 'location_number']} />
+              <Field label="Classification Description" path={['classifications', `${index}`, 'classification_description']} />
+              <Field label="Class Code" path={['classifications', `${index}`, 'class_code']} />
+              <Field label="Premium Basis" path={['classifications', `${index}`, 'premium_basis']} />
+              <Field label="Exposure" path={['classifications', `${index}`, 'exposure']} />
+              <Field label="Territory" path={['classifications', `${index}`, 'territory']} />
+              <Field label="Rate" path={['classifications', `${index}`, 'rate']} />
+              <Field label="Premium" path={['classifications', `${index}`, 'premium']} />
             </div>
           </div>
         ))}
@@ -273,8 +339,8 @@ export function ACORD126FormComponent({ formData, onEditForm }: ACORD126FormProp
             {formState.coverage_information.other_coverages.map((coverage, index) => (
               <div key={index} className="pl-4 mb-4 border-l-2 border-gray-200 dark:border-gray-700">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Field label="Coverage Type" path={['coverage_information', 'other_coverages', index, 'coverage_type']} />
-                  <Field label="Description" path={['coverage_information', 'other_coverages', index, 'description']} />
+                  <Field label="Coverage Type" path={['coverage_information', 'other_coverages', `${index}`, 'coverage_type']} />
+                  <Field label="Description" path={['coverage_information', 'other_coverages', `${index}`, 'description']} />
                 </div>
               </div>
             ))}
@@ -391,18 +457,12 @@ export function ACORD126FormComponent({ formData, onEditForm }: ACORD126FormProp
           <div>
             {formState.loss_history.claims.map((claim, index) => (
               <div key={index} className="mb-6 pb-6 border-b border-gray-200 dark:border-gray-700 last:border-b-0 last:mb-0 last:pb-0">
-                <h3 className="text-md font-semibold mb-4">Claim {index + 1}</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Field label="Date of Occurrence" path={['loss_history', 'claims', index, 'date_of_occurrence']} type="date" />
-                  <Field label="Amount Paid" path={['loss_history', 'claims', index, 'amount_paid']} />
-                  <Field label="Amount Reserved" path={['loss_history', 'claims', index, 'amount_reserved']} />
-                  <Field label="Status" path={['loss_history', 'claims', index, 'status']} />
-                  <Field 
-                    label="Description" 
-                    path={['loss_history', 'claims', index, 'description']} 
-                    type="textarea" 
-                    className="col-span-2"
-                  />
+                  <Field label="Date of Occurrence" path={['loss_history', 'claims', `${index}`, 'date_of_occurrence']} />
+                  <Field label="Status" path={['loss_history', 'claims', `${index}`, 'status']} />
+                  <Field label="Amount Paid" path={['loss_history', 'claims', `${index}`, 'amount_paid']} />
+                  <Field label="Amount Reserved" path={['loss_history', 'claims', `${index}`, 'amount_reserved']} />
+                  <Field label="Description" path={['loss_history', 'claims', `${index}`, 'description']} />
                 </div>
               </div>
             ))}

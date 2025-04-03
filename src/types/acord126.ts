@@ -37,6 +37,13 @@ export interface ACORD126Form {
     };
   };
 
+  // Contact Information
+  contact_information: {
+    contact_name: string;
+    primary_phone: string;
+    primary_email: string;
+  };
+
   // Policy Information
   policy_information: {
     proposed_eff_date: string;
