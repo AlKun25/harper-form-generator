@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { mapMemoryToACORD125 } from '@/utils/acord125-mapper';
-import { ACORD125Form } from '@/types/acord125';
+import { mapMemoryToACORD126 } from '@/utils/acord126-mapper';
+import { ACORD126Form } from '@/types/acord126';
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    console.log(`Generating form for company ID: ${companyId}`);
+    console.log(`Generating ACORD126 form for company ID: ${companyId}`);
 
     // Fetch company memory from our memory API
     const memoryApiUrl = `${request.nextUrl.origin}/api/memory?companyId=${companyId}`;
@@ -49,8 +49,8 @@ export async function POST(request: NextRequest) {
     
     console.log('Memory API response structure:', JSON.stringify(Object.keys(memoryData), null, 2));
     
-    // Map memory data to ACORD 125 form
-    let formData: ACORD125Form;
+    // Map memory data to ACORD 126 form
+    let formData: ACORD126Form;
     try {
       // Check if we received a valid memory structure
       if (!memoryData.data) {
@@ -70,12 +70,12 @@ export async function POST(request: NextRequest) {
         hasPhoneEvents: !!memoryData.data.phone_events || !!memoryData.data.company?.phone_events,
       });
       
-      // Pass the actual memory data to the mapper
-      formData = mapMemoryToACORD125(memoryData.data);
+      // Pass the actual memory data to the ACORD126 mapper
+      formData = mapMemoryToACORD126(memoryData.data);
       
-      console.log('Successfully mapped memory data to ACORD125 form');
+      console.log('Successfully mapped memory data to ACORD126 form');
     } catch (error) {
-      console.error('Error mapping memory data to ACORD 125 form:', error);
+      console.error('Error mapping memory data to ACORD126 form:', error);
       
       // Return partial data for debugging
       return NextResponse.json({

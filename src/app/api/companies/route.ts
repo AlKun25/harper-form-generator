@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { Company } from '@/types';
-import { RETOOL_API, getRetoolUrl } from '@/config/api-config';
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,35 +7,46 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1', 10);
     const limit = parseInt(searchParams.get('limit') || '50', 10);
     
-    // Fetch companies from the Retool API
-    const response = await fetch(getRetoolUrl(RETOOL_API.ENDPOINTS.COMPANIES), {
-      method: 'POST',
-      headers: RETOOL_API.getHeaders('COMPANIES'),
-      body: JSON.stringify({}) // Empty body for POST request
-    });
-    
-    if (!response.ok) {
-      throw new Error(`API returned ${response.status}: ${response.statusText}`);
-    }
-    
-    const apiCompanies = await response.json();
-    
-    // Ensure we have an array and transform to match Company type
-    const companiesArray = Array.isArray(apiCompanies) ? apiCompanies : [];
-    
-    // Transform to match the expected Company type and filter duplicates
-    const uniqueCompanies = filterUniqueCompanies(companiesArray).map(company => ({
-      id: company.id,
-      name: company.company_name,
-      industry: company.industry || '' // Add default value for required fields
-    }));
+    // Mock company data
+    const mockCompanies = [
+      {
+        id: "1",
+        name: "Acme Construction Co.",
+        industry: "Construction"
+      },
+      {
+        id: "2",
+        name: "TechSoft Solutions",
+        industry: "Technology"
+      },
+      {
+        id: "3",
+        name: "Global Shipping Inc.",
+        industry: "Transportation"
+      },
+      {
+        id: "4",
+        name: "Sunrise Healthcare",
+        industry: "Healthcare"
+      },
+      {
+        id: "5",
+        name: "Metropolitan Insurance",
+        industry: "Insurance"
+      },
+      {
+        id: "123456",
+        name: "Acme Construction Co.",
+        industry: "Construction"
+      }
+    ];
     
     // Calculate pagination
-    const totalItems = uniqueCompanies.length;
+    const totalItems = mockCompanies.length;
     const totalPages = Math.ceil(totalItems / limit);
     const startIndex = (page - 1) * limit;
     const endIndex = startIndex + limit;
-    const paginatedCompanies = uniqueCompanies.slice(startIndex, endIndex);
+    const paginatedCompanies = mockCompanies.slice(startIndex, endIndex);
     
     return NextResponse.json({ 
       success: true,
@@ -57,22 +66,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-/**
- * Filters out duplicate companies based on their ID
- */
-function filterUniqueCompanies(companies: any[]): any[] {
-  const uniqueMap = new Map();
-  
-  return companies.filter(company => {
-    const id = company.id;
-    if (!id) return true; // Keep entries without ID
-    
-    if (!uniqueMap.has(id)) {
-      uniqueMap.set(id, true);
-      return true;
-    }
-    return false;
-  });
 } 

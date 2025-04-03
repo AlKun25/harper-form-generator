@@ -1,99 +1,116 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { RETOOL_API, getRetoolUrl } from '@/config/api-config';
+import { NextResponse } from 'next/server';
 
-export async function GET(request: NextRequest) {
+export async function GET(request: Request) {
   try {
+    // Get query parameters
     const { searchParams } = new URL(request.url);
     const companyId = searchParams.get('companyId');
-
-    if (!companyId) {
-      return NextResponse.json(
-        { success: false, error: 'Company ID is required' },
-        { status: 400 }
-      );
-    }
     
-    console.log(`Fetching memory data for company ID: ${companyId}`);
-    
-    // Fetch company memory from the Retool API
-    const response = await fetch(getRetoolUrl(RETOOL_API.ENDPOINTS.MEMORY_INTERVIEW), {
-      method: 'POST',
-      headers: RETOOL_API.getHeaders('MEMORY_INTERVIEW'),
-      body: JSON.stringify({ company_id: companyId })
-    });
-    
-    if (!response.ok) {
-      let errorMessage = `API returned ${response.status}: ${response.statusText}`;
-      try {
-        const errorText = await response.text();
-        console.error('Error response from memory API:', errorText);
-        errorMessage += ` - ${errorText}`;
-      } catch (e) {
-        console.error('Could not read error response');
-      }
-      
-      // For 404 responses, we'll check if there's still any usable data
-      // If it's a proper 404 with no data, we'll handle it based on response content
-      if (response.status === 404) {
-        try {
-          // Try to parse the response to see if it contains any memory data
-          // Some APIs return 404 for the company but still include memory data
-          const notFoundData = await response.clone().json();
-          
-          // Check if we have any useful memory data despite the 404
-          if (notFoundData && (
-              notFoundData.memory || 
-              notFoundData.facts || 
-              notFoundData.phone_events || 
-              notFoundData.company?.phone_events
-          )) {
-            console.log("Found memory data despite 404 company status");
-            return NextResponse.json({
-              success: true,
-              data: notFoundData,
-              warning: "Company not found but memory data exists"
-            });
-          }
-        } catch (parseError) {
-          // If we can't parse the 404 response, just continue with the standard error
-          console.error("Couldn't parse 404 response to check for memory:", parseError);
+    // This is mock data for demonstration
+    const mockMemoryData = {
+      company: {
+        json: {
+          company: {
+            id: companyId || "123456",
+            company_name: "Acme Construction Co.",
+            company_primary_phone: "555-123-4567",
+            company_description: "Commercial construction contractor specializing in retail spaces",
+            company_naics_code: "23622",
+            company_sic_code: "1542",
+            company_legal_entity_type: "LLC",
+            company_website: "https://acmeconstruction.example.com",
+            company_industry: "Construction",
+            company_sub_industry: "Commercial Building Construction",
+            company_primary_email: "info@acmeconstruction.example.com",
+            company_street_address_1: "123 Builder Way",
+            company_street_address_2: "Suite 300",
+            company_city: "Constructionville",
+            company_state: "CA",
+            company_postal_code: "90210",
+            insurance_types: ["General Liability", "Workers Compensation"],
+            company_annual_revenue_usd: "5000000",
+            company_annual_payroll_usd: "1200000",
+            company_sub_contractor_costs_usd: "750000",
+            company_full_time_employees: 25,
+            company_part_time_employees: 5,
+            company_years_in_business: 12
+          },
+          contacts: [
+            {
+              id: "c001",
+              company_id: companyId ? parseInt(companyId) : 123456,
+              contact_first_name: "John",
+              contact_last_name: "Builder",
+              contact_primary_phone: "555-987-6543",
+              contact_primary_email: "john@acmeconstruction.example.com",
+              contact_years_of_owner_experience: 15
+            }
+          ],
+          facts: [
+            {
+              uuid: "f001",
+              fact: "Each occurrence limit is $1,000,000",
+              name: "liability_limit",
+              created_at: "2023-01-15T12:00:00Z"
+            },
+            {
+              uuid: "f002",
+              fact: "General aggregate limit is $2,000,000",
+              name: "general_aggregate",
+              created_at: "2023-01-15T12:00:00Z"
+            },
+            {
+              uuid: "f003",
+              fact: "Company subcontracts 30% of their work",
+              name: "subcontract_percentage",
+              created_at: "2023-01-15T12:00:00Z"
+            },
+            {
+              uuid: "f004",
+              fact: "They require certificates of insurance from all subcontractors",
+              name: "certificates_required",
+              created_at: "2023-01-15T12:00:00Z"
+            },
+            {
+              uuid: "f005",
+              fact: "Had a claim on 05/12/2022 for property damage, amount paid $25,000, claim is closed",
+              name: "loss_history",
+              created_at: "2023-01-15T12:00:00Z"
+            }
+          ]
+        },
+        phone_events: {
+          json: [
+            {
+              event: "call",
+              direction: "inbound",
+              content: "Client mentioned they have a second location at address: 456 Construction Avenue, Builderville, CA 92101",
+              created_at: "2023-01-10T15:30:00Z"
+            },
+            {
+              event: "call",
+              direction: "outbound",
+              content: "Discussed additional coverage needs including $500,000 for damage to rented premises",
+              created_at: "2023-01-12T10:15:00Z"
+            }
+          ]
         }
-        
-        // Standard 404 handling if no memory data found
-        return NextResponse.json(
-          { success: false, error: 'Company memory not found' },
-          { status: 404 }
-        );
       }
-      
-      throw new Error(errorMessage);
-    }
+    };
     
-    let memory;
-    try {
-      memory = await response.json();
-      console.log("Memory API returned structure:", Object.keys(memory));
-    } catch (error) {
-      console.error("Failed to parse memory API response:", error);
-      return NextResponse.json(
-        { success: false, error: 'Invalid JSON response from API' },
-        { status: 500 }
-      );
-    }
-    
-    // Ensure we have valid structure even if API returns unexpected format
-    if (!memory) {
-      memory = {};
-    }
-    
-    return NextResponse.json({ 
+    // Return in the format expected by the company page
+    return NextResponse.json({
       success: true,
-      data: memory
+      data: mockMemoryData
     });
   } catch (error) {
-    console.error('Error fetching company memory:', error);
+    console.error('Error fetching memory data:', error);
+    
     return NextResponse.json(
-      { success: false, error: 'Failed to fetch company memory: ' + (error instanceof Error ? error.message : 'Unknown error') },
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
+      },
       { status: 500 }
     );
   }
