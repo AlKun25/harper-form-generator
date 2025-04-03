@@ -19,11 +19,32 @@ export async function POST(request: NextRequest) {
     
     console.log(`Generating ${formType} form for company ID: ${companyId}`);
 
-    // Fetch company memory from our memory API
-    const memoryApiUrl = `${request.nextUrl.origin}/api/memory?companyId=${companyId}`;
+    // Use a platform-agnostic approach for fetching from the same origin
+    let memoryApiUrl;
+    
+    // In Node.js environment (server-side), we need absolute URLs for fetch
+    if (process.env.NODE_ENV === 'production') {
+      // For production: use API_BASE_URL environment variable 
+      // Set this in your Render dashboard to your app's URL (e.g., https://your-app.onrender.com)
+      if (process.env.API_BASE_URL) {
+        memoryApiUrl = `${process.env.API_BASE_URL}/api/memory?companyId=${companyId}`;
+      } else {
+        // Fallback to same-origin request by parsing from the request
+        // This approach should work on Render and other platforms
+        const origin = request.headers.get('host') || request.headers.get('x-forwarded-host');
+        const protocol = request.headers.get('x-forwarded-proto') || 'https';
+        memoryApiUrl = `${protocol}://${origin}/api/memory?companyId=${companyId}`;
+      }
+    } else {
+      // For development: use localhost
+      memoryApiUrl = `http://localhost:3000/api/memory?companyId=${companyId}`;
+    }
+    
     console.log(`Fetching memory data from: ${memoryApiUrl}`);
     
-    const memoryResponse = await fetch(memoryApiUrl);
+    const memoryResponse = await fetch(memoryApiUrl, {
+      headers: request.headers
+    });
     
     if (!memoryResponse.ok) {
       console.error(`Memory API returned ${memoryResponse.status}: ${memoryResponse.statusText}`);
