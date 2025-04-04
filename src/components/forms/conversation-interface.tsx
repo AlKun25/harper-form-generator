@@ -351,205 +351,349 @@ Only respond with the JSON object if a change is requested, otherwise respond co
 
       const assistantResponse = response.text || 'Sorry, I could not process your request.';
       
-      // Add assistant response to chat
-      setMessages(prev => [...prev, { role: 'assistant', content: assistantResponse }]);
+      // Check if response contains a JSON object for form updates
+      let jsonMatch = assistantResponse.match(/```json\s*({[\s\S]*?})\s*```/);
+      if (!jsonMatch) {
+        // If not found, try to find any JSON object with braces in the text
+        jsonMatch = assistantResponse.match(/({(?:[^{}]|{[^{}]*})*})/g);
+      }
       
-      // Check if response contains a JSON object
-      try {
-        // First try to find a JSON object between triple backticks
-        let jsonMatch = assistantResponse.match(/```json\s*({[\s\S]*?})\s*```/);
-        if (!jsonMatch) {
-          // If not found, try to find any JSON object with braces in the text
-          jsonMatch = assistantResponse.match(/({(?:[^{}]|{[^{}]*})*})/g);
-        }
+      let updates = null;
+      let displayMessage = assistantResponse;
+      
+      if (jsonMatch) {
+        // Try to parse the first matching JSON object
+        const jsonStr = jsonMatch[0].replace(/```json|```/g, '').trim();
+        console.log('Extracted JSON from response:', jsonStr);
         
-        let updates = null;
-        
-        if (jsonMatch) {
-          // Try to parse the first matching JSON object
-          const jsonStr = jsonMatch[0].replace(/```json|```/g, '').trim();
-          console.log('Extracted JSON from response:', jsonStr);
+        try {
+          updates = JSON.parse(jsonStr);
+          console.log('Parsed updates:', updates);
           
+          // Remove the JSON from the display message to avoid showing technical content
+          displayMessage = displayMessage.replace(jsonMatch[0], '').trim();
+          
+          // If the message is now empty or just contains code fences, replace with a generic message
+          if (!displayMessage || displayMessage.match(/^```\s*```$/)) {
+            displayMessage = 'I understand your request.';
+          }
+        } catch (parseError) {
+          console.error('Error parsing JSON:', parseError);
+          // Try cleaning up the string more aggressively
+          const cleanedStr = jsonStr.replace(/[\u201C\u201D]/g, '"').replace(/'/g, '"');
           try {
-            updates = JSON.parse(jsonStr);
-            console.log('Parsed updates:', updates);
-          } catch (parseError) {
-            console.error('Error parsing JSON:', parseError);
-            // Try cleaning up the string more aggressively
-            const cleanedStr = jsonStr.replace(/[\u201C\u201D]/g, '"').replace(/'/g, '"');
-            try {
-              updates = JSON.parse(cleanedStr);
-              console.log('Parsed updates after cleanup:', updates);
-            } catch (e) {
-              console.error('Failed to parse JSON even after cleanup:', e);
+            updates = JSON.parse(cleanedStr);
+            console.log('Parsed updates after cleanup:', updates);
+            
+            // Remove the JSON from the display message
+            displayMessage = displayMessage.replace(jsonMatch[0], '').trim();
+            
+            // If the message is now empty or just contains code fences, replace with a generic message
+            if (!displayMessage || displayMessage.match(/^```\s*```$/)) {
+              displayMessage = 'I understand your request.';
+            }
+          } catch (e) {
+            console.error('Failed to parse JSON even after cleanup:', e);
+          }
+        }
+      } else if (assistantResponse.toLowerCase().includes('update') && 
+               (assistantResponse.toLowerCase().includes('contact') || 
+                assistantResponse.toLowerCase().includes('agency') ||
+                assistantResponse.toLowerCase().includes('phone') ||
+                assistantResponse.toLowerCase().includes('email'))) {
+        // If we can't find JSON but the message clearly indicates an update intention,
+        // try to extract the update information heuristically
+        console.log('No JSON found, but update intent detected. Trying to extract update information.');
+        
+        // Example: Find patterns like "I've updated the contact phone to 123-456-7890"
+        const phoneMatch = assistantResponse.match(/phone\s+(?:number|to)\s+([0-9\-() +]+)/i);
+        const emailMatch = assistantResponse.match(/email\s+(?:to|address)\s+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+        const nameMatch = assistantResponse.match(/(?:contact|name)\s+(?:to|as)\s+([A-Za-z ]+)/i);
+        
+        if (phoneMatch && phoneMatch[1]) {
+          updates = { contact_information: { primary_phone: phoneMatch[1].trim() } };
+          console.log('Extracted phone update:', updates);
+        } else if (emailMatch && emailMatch[1]) {
+          updates = { contact_information: { primary_email: emailMatch[1].trim() } };
+          console.log('Extracted email update:', updates);
+        } else if (nameMatch && nameMatch[1]) {
+          updates = { contact_information: { contact_name: nameMatch[1].trim() } };
+          console.log('Extracted name update:', updates);
+        }
+      } else {
+        console.log('No JSON object or clear update intent found in response:', assistantResponse);
+      }
+      
+      // Add assistant response to chat (filtered to remove JSON)
+      setMessages(prev => [...prev, { role: 'assistant', content: displayMessage }]);
+      
+      if (updates) {
+        // Extract field name and value in a more programmatic way
+        let fieldName = '';
+        let fieldValue = '';
+        
+        // Function to convert path to human-readable field name
+        const getHumanReadableFieldName = (path: string): string => {
+          // Extract the last part of the path for simple fields
+          const parts = path.split('.');
+          const lastPart = parts[parts.length - 1];
+          
+          // Convert snake_case to space-separated words
+          let readableName = lastPart.replace(/_/g, ' ');
+          
+          // Special case mapping for improved readability
+          const fieldNameMapping: Record<string, string> = {
+            'name': 'name',
+            'policy_number': 'policy number',
+            'contact_name': 'contact name',
+            'primary_phone': 'phone number',
+            'primary_email': 'email address',
+            'annual_revenues': 'annual revenue',
+            'description_primary_operations': 'business description',
+            'business_phone': 'business phone',
+            'website_address': 'website',
+            'each_occurrence': 'occurrence limit',
+            'general_aggregate': 'general aggregate limit',
+            'deductible': 'deductible'
+          };
+          
+          // Check if we have a specific mapping for this field
+          if (fieldNameMapping[lastPart]) {
+            readableName = fieldNameMapping[lastPart];
+          }
+          
+          // For more context in nested fields, include parent path in certain cases
+          if (parts.length > 1) {
+            // Map parent paths to context prefixes
+            const parentContextMapping: Record<string, string> = {
+              'carrier': 'carrier',
+              'agency': 'agency',
+              'contact_information': 'contact',
+              'applicant_information': 'applicant',
+              'premises_information': 'premises',
+              'prior_carrier_information': 'prior carrier',
+              'nature_of_business': 'business',
+              'policy_information': 'policy',
+              'limits_of_liability': 'liability'
+            };
+            
+            // Add prefix if needed and not redundant with field name
+            const parentKey = parts[parts.length - 2];
+            if (parentContextMapping[parentKey] && 
+                !readableName.includes(parentContextMapping[parentKey])) {
+              readableName = `${parentContextMapping[parentKey]} ${readableName}`;
             }
           }
-        } else if (assistantResponse.toLowerCase().includes('update') && 
-                  (assistantResponse.toLowerCase().includes('contact') || 
-                   assistantResponse.toLowerCase().includes('agency') ||
-                   assistantResponse.toLowerCase().includes('phone') ||
-                   assistantResponse.toLowerCase().includes('email'))) {
-          // If we can't find JSON but the message clearly indicates an update intention,
-          // try to extract the update information heuristically
-          console.log('No JSON found, but update intent detected. Trying to extract update information.');
           
-          // Example: Find patterns like "I've updated the contact phone to 123-456-7890"
-          const phoneMatch = assistantResponse.match(/phone\s+(?:number|to)\s+([0-9\-() +]+)/i);
-          const emailMatch = assistantResponse.match(/email\s+(?:to|address)\s+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
-          const nameMatch = assistantResponse.match(/(?:contact|name)\s+(?:to|as)\s+([A-Za-z ]+)/i);
-          
-          if (phoneMatch && phoneMatch[1]) {
-            updates = { contact_information: { primary_phone: phoneMatch[1].trim() } };
-            console.log('Extracted phone update:', updates);
-          } else if (emailMatch && emailMatch[1]) {
-            updates = { contact_information: { primary_email: emailMatch[1].trim() } };
-            console.log('Extracted email update:', updates);
-          } else if (nameMatch && nameMatch[1]) {
-            updates = { contact_information: { contact_name: nameMatch[1].trim() } };
-            console.log('Extracted name update:', updates);
+          return readableName;
+        };
+        
+        // Function to recursively find and format the first field in the updates object
+        const findFirstField = (obj: Record<string, any>, currentPath = ''): [string, string] | null => {
+          for (const [key, value] of Object.entries(obj)) {
+            const newPath = currentPath ? `${currentPath}.${key}` : key;
+            
+            if (value !== null && typeof value === 'object') {
+              // Recursively search in nested objects
+              const result = findFirstField(value, newPath);
+              if (result) return result;
+            } else {
+              // Format the value based on type
+              let formattedValue = String(value);
+              
+              // Add dollar sign to values that look like monetary amounts
+              if (/^\d+(\.\d+)?$/.test(formattedValue) && 
+                  (newPath.includes('revenue') || 
+                   newPath.includes('premium') || 
+                   newPath.includes('limit') || 
+                   newPath.includes('deductible') ||
+                   newPath.includes('amount') ||
+                   newPath.includes('cost'))) {
+                formattedValue = `$${formattedValue}`;
+              }
+              
+              return [getHumanReadableFieldName(newPath), formattedValue];
+            }
           }
+          return null;
+        };
+        
+        // Extract field info
+        const fieldInfo = findFirstField(updates);
+        if (fieldInfo) {
+          [fieldName, fieldValue] = fieldInfo;
         } else {
-          console.log('No JSON object or clear update intent found in response:', assistantResponse);
+          // Fallback if no field found (unlikely)
+          fieldName = 'field';
+          fieldValue = 'updated value';
         }
         
-        if (updates) {
-          // Indicate in the UI that we're applying updates
-          setMessages(prev => [...prev, { 
-            role: 'assistant', 
-            content: 'I am updating the form with your changes...' 
-          }]);
+        // Create a more personalized insurance broker-like message with call to action
+        const brokerMessages = [
+          `Perfect! I've updated the ${fieldName} to ${fieldValue}. What else would you like to adjust on this form?`,
+          `I've set the ${fieldName} to ${fieldValue}. Is there anything else you'd like me to update?`,
+          `Great, the ${fieldName} has been changed to ${fieldValue}. Would you like to review any other details?`,
+          `The ${fieldName} is now ${fieldValue}. What other changes would you like to make?`,
+          `I've updated your policy's ${fieldName} to ${fieldValue}. Can I help you with any other fields?`
+        ];
+        
+        // Choose a random broker message for variety
+        const brokerMessage = brokerMessages[Math.floor(Math.random() * brokerMessages.length)];
+        
+        try {
+          // Force the form into editing mode before applying updates
+          // Using a proper DOM selector with buttons that contain "Edit Form" text
+          const editButtons = Array.from(document.querySelectorAll('button'))
+            .filter(button => button.textContent?.includes('Edit Form'));
           
-          try {
-            // Force the form into editing mode before applying updates
-            // Using a proper DOM selector with buttons that contain "Edit Form" text
-            const editButtons = Array.from(document.querySelectorAll('button'))
-              .filter(button => button.textContent?.includes('Edit Form'));
+          if (editButtons.length > 0) {
+            console.log('Found Edit Form button, clicking to enable editing');
+            editButtons[0].click();
             
-            if (editButtons.length > 0) {
-              console.log('Found Edit Form button, clicking to enable editing');
-              editButtons[0].click();
+            // Force the form into edit mode
+            console.log('Forcing both forms into edit mode directly');
+            const forms = document.querySelectorAll('form');
+            forms.forEach(form => {
+              form.classList.add('editing');
+            });
+            
+            // Give the UI a moment to enter edit mode before applying updates
+            setTimeout(() => {
+              // Apply the updates
+              console.log('Applying updates to form data:', updates);
+              onUpdateForm(updates!);
               
-              // Force the form into edit mode
-              console.log('Forcing both forms into edit mode directly');
-              const forms = document.querySelectorAll('form');
-              forms.forEach(form => {
-                form.classList.add('editing');
+              // Try to directly update form fields as well for better reliability
+              console.log('Directly updating form fields');
+              tryDirectFormFieldUpdate(updates!);
+              
+              // Add more direct form manipulation to ensure updates are visible
+              console.log('Performing additional direct updates');
+              Object.entries(updates!).forEach(([key, value]) => {
+                if (key === 'contact_information' && typeof value === 'object' && value !== null) {
+                  // Handle contact information updates
+                  const contactInfo = value as Record<string, any>;
+                  
+                  if (contactInfo.primary_phone) {
+                    const phoneInput = document.querySelector('input[id*="phone"]') as HTMLInputElement;
+                    if (phoneInput) {
+                      console.log('Directly setting phone input value:', contactInfo.primary_phone);
+                      phoneInput.value = String(contactInfo.primary_phone);
+                      phoneInput.dispatchEvent(new Event('input', { bubbles: true }));
+                      phoneInput.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                  }
+                  
+                  if (contactInfo.contact_name) {
+                    const nameInput = document.querySelector('input[id*="contact-name"]') as HTMLInputElement;
+                    if (nameInput) {
+                      console.log('Directly setting contact name input value:', contactInfo.contact_name);
+                      nameInput.value = String(contactInfo.contact_name);
+                      nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+                      nameInput.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                  }
+                  
+                  if (contactInfo.primary_email) {
+                    const emailInput = document.querySelector('input[id*="email"]') as HTMLInputElement;
+                    if (emailInput) {
+                      console.log('Directly setting email input value:', contactInfo.primary_email);
+                      emailInput.value = String(contactInfo.primary_email);
+                      emailInput.dispatchEvent(new Event('input', { bubbles: true }));
+                      emailInput.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                  }
+                } else if (key === 'agency' && typeof value === 'object' && value !== null) {
+                  // Handle agency information updates
+                  const agencyInfo = value as Record<string, any>;
+                  
+                  if (agencyInfo.contact_name) {
+                    const contactInput = document.querySelector('input[id*="agency-contact"]') as HTMLInputElement;
+                    if (contactInput) {
+                      console.log('Directly setting agency contact value:', agencyInfo.contact_name);
+                      contactInput.value = String(agencyInfo.contact_name);
+                      contactInput.dispatchEvent(new Event('input', { bubbles: true }));
+                      contactInput.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                  }
+                }
               });
               
-              // Give the UI a moment to enter edit mode before applying updates
+              // After a short delay, find and click the Save button to exit edit mode
               setTimeout(() => {
-                // Apply the updates
-                console.log('Applying updates to form data:', updates);
-                onUpdateForm(updates!);
+                const saveButtons = Array.from(document.querySelectorAll('button'))
+                  .filter(button => button.textContent?.includes('Save Changes'));
                 
-                // Try to directly update form fields as well for better reliability
-                console.log('Directly updating form fields');
-                tryDirectFormFieldUpdate(updates!);
-                
-                // Add more direct form manipulation to ensure updates are visible
-                console.log('Performing additional direct updates');
-                Object.entries(updates!).forEach(([key, value]) => {
-                  if (key === 'contact_information' && typeof value === 'object' && value !== null) {
-                    // Handle contact information updates
-                    const contactInfo = value as Record<string, any>;
-                    
-                    if (contactInfo.primary_phone) {
-                      const phoneInput = document.querySelector('input[id*="phone"]') as HTMLInputElement;
-                      if (phoneInput) {
-                        console.log('Directly setting phone input value:', contactInfo.primary_phone);
-                        phoneInput.value = String(contactInfo.primary_phone);
-                        phoneInput.dispatchEvent(new Event('input', { bubbles: true }));
-                        phoneInput.dispatchEvent(new Event('change', { bubbles: true }));
-                      }
-                    }
-                    
-                    if (contactInfo.contact_name) {
-                      const nameInput = document.querySelector('input[id*="contact-name"]') as HTMLInputElement;
-                      if (nameInput) {
-                        console.log('Directly setting contact name input value:', contactInfo.contact_name);
-                        nameInput.value = String(contactInfo.contact_name);
-                        nameInput.dispatchEvent(new Event('input', { bubbles: true }));
-                        nameInput.dispatchEvent(new Event('change', { bubbles: true }));
-                      }
-                    }
-                    
-                    if (contactInfo.primary_email) {
-                      const emailInput = document.querySelector('input[id*="email"]') as HTMLInputElement;
-                      if (emailInput) {
-                        console.log('Directly setting email input value:', contactInfo.primary_email);
-                        emailInput.value = String(contactInfo.primary_email);
-                        emailInput.dispatchEvent(new Event('input', { bubbles: true }));
-                        emailInput.dispatchEvent(new Event('change', { bubbles: true }));
-                      }
-                    }
-                  } else if (key === 'agency' && typeof value === 'object' && value !== null) {
-                    // Handle agency information updates
-                    const agencyInfo = value as Record<string, any>;
-                    
-                    if (agencyInfo.contact_name) {
-                      const contactInput = document.querySelector('input[id*="agency-contact"]') as HTMLInputElement;
-                      if (contactInput) {
-                        console.log('Directly setting agency contact value:', agencyInfo.contact_name);
-                        contactInput.value = String(agencyInfo.contact_name);
-                        contactInput.dispatchEvent(new Event('input', { bubbles: true }));
-                        contactInput.dispatchEvent(new Event('change', { bubbles: true }));
-                      }
-                    }
-                  }
-                });
-                
-                // After a short delay, find and click the Save button to exit edit mode
-                setTimeout(() => {
-                  const saveButtons = Array.from(document.querySelectorAll('button'))
-                    .filter(button => button.textContent?.includes('Save Changes'));
+                if (saveButtons.length > 0) {
+                  console.log('Automatically saving changes');
+                  saveButtons[0].click();
                   
-                  if (saveButtons.length > 0) {
-                    console.log('Automatically saving changes');
-                    saveButtons[0].click();
+                  // Only show the broker-style message after all operations are complete
+                  setMessages(prev => {
+                    // Remove any pending "I am updating..." or JSON messages
+                    const filteredMessages = prev.filter(m => 
+                      !m.content.includes("updating the form") && 
+                      !m.content.startsWith("{") &&
+                      !m.content.includes("I have updated the form") &&
+                      !m.content.includes("The changes are in edit mode now")
+                    );
                     
-                    // Add confirmation message
-                    setMessages(prev => [...prev, { 
+                    return [...filteredMessages, { 
                       role: 'assistant', 
-                      content: 'I have updated the form successfully. The changes have been applied and saved.' 
-                    }]);
-                  } else {
-                    // If we can't find the save button, still confirm that updates were applied
-                    setMessages(prev => [...prev, { 
+                      content: brokerMessage 
+                    }];
+                  });
+                } else {
+                  // If we can't find the save button, still show the broker message but without the "edit mode" text
+                  setMessages(prev => {
+                    // Remove any pending "I am updating..." or JSON messages
+                    const filteredMessages = prev.filter(m => 
+                      !m.content.includes("updating the form") && 
+                      !m.content.startsWith("{") &&
+                      !m.content.includes("I have updated the form") &&
+                      !m.content.includes("The changes are in edit mode now")
+                    );
+                    
+                    return [...filteredMessages, { 
                       role: 'assistant', 
-                      content: 'I have updated the form. The changes are in edit mode now. Click Save Changes when you\'re ready.' 
-                    }]);
-                  }
-                }, 1000); // Increase delay to ensure updates are applied
-              }, 500); // Increase delay to ensure edit mode is entered
-            } else {
-              // If we can't find the edit button, still apply updates
-              // and try direct form field update as a fallback
-              console.log('No Edit Form button found, applying updates directly');
-              onUpdateForm(updates);
-              tryDirectFormFieldUpdate(updates);
+                      content: brokerMessage 
+                    }];
+                  });
+                }
+              }, 1000); // Increase delay to ensure updates are applied
+            }, 500); // Increase delay to ensure edit mode is entered
+          } else {
+            // If we can't find the edit button, still apply updates
+            // and try direct form field update as a fallback
+            console.log('No Edit Form button found, applying updates directly');
+            onUpdateForm(updates);
+            tryDirectFormFieldUpdate(updates);
+            
+            // Show the broker-style message
+            setMessages(prev => {
+              // Remove any pending "I am updating..." or JSON messages
+              const filteredMessages = prev.filter(m => 
+                !m.content.includes("updating the form") && 
+                !m.content.startsWith("{") &&
+                !m.content.includes("I have updated the form") &&
+                !m.content.includes("The changes are in edit mode now")
+              );
               
-              // Add confirmation message
-              setMessages(prev => [...prev, { 
+              return [...filteredMessages, { 
                 role: 'assistant', 
-                content: 'I have updated the form data. The changes may not be visible in the form until you click Edit Form and Save Changes.' 
-              }]);
-            }
-          } catch (error) {
-            console.error('Error applying form updates:', error);
-            setMessages(prev => [...prev, { 
-              role: 'assistant', 
-              content: 'I encountered an error while updating the form. Please try updating the field manually.' 
-            }]);
+                content: brokerMessage 
+              }];
+            });
           }
-        } else {
-          console.log('No updates to apply');
+        } catch (error) {
+          console.error('Error applying form updates:', error);
+          setMessages(prev => [...prev, { 
+            role: 'assistant', 
+            content: `I'm sorry, I encountered an issue while updating the ${fieldName}. Could you try again or let me know what other changes you need?` 
+          }]);
         }
-      } catch (error) {
-        console.error('Error parsing updates:', error);
-        setMessages(prev => [...prev, { 
-          role: 'assistant', 
-          content: 'I understood your request, but encountered a technical issue while processing the update. Please try again or update the field manually.' 
-        }]);
+      } else {
+        console.log('No updates to apply');
       }
 
       // Automatically speak the assistant's response if voice features are available
