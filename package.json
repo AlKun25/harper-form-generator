@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@anvilco/anvil": "^3.3.2",
     "@clerk/nextjs": "^6.12.12",
     "@clerk/themes": "^2.2.26",
     "@deepgram/sdk": "^3.11.3",
@@ -31,6 +32,7 @@
     "react-hook-form": "^7.55.0",
     "shadcn-ui": "^0.9.5",
     "tailwind-merge": "^3.1.0",
+    "ts-node": "^10.9.2",
     "zod": "^3.24.2"
   },
   "devDependencies": {
