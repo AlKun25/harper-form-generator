@@ -1,18 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import aiProvider, { AIProviderType } from '@/lib/ai-services/ai-provider';
+import OpenAI from 'openai';
+
+// Initialize OpenAI client on server-side only
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY || ''
+});
 
 export async function POST(request: NextRequest) {
   try {
-    // Check if we have an AI provider that supports voice
-    if (aiProvider.getCurrentProvider() !== AIProviderType.OPENAI) {
-      return NextResponse.json(
-        { success: false, error: 'Voice features are not available' },
-        { status: 503 }
-      );
-    }
-
     const body = await request.json();
-    const { text, voice } = body;
+    const { text, voice = 'nova' } = body;
 
     if (!text) {
       return NextResponse.json(
@@ -21,19 +18,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate speech using the AI provider
-    const result = await aiProvider.textToSpeech({
-      text,
-      voice: voice || 'nova'
-    });
+    // Generate speech using the OpenAI API directly
+    try {
+      const mp3 = await openai.audio.speech.create({
+        model: 'tts-1',
+        voice: voice,
+        input: text,
+      });
+      
+      const buffer = await mp3.arrayBuffer();
 
-    // Return the audio as a streaming response
-    return new NextResponse(result.audioBuffer, {
-      headers: {
-        'Content-Type': 'audio/mpeg',
-        'Content-Length': result.audioBuffer.byteLength.toString(),
-      },
-    });
+      // Return the audio as a streaming response
+      return new NextResponse(buffer, {
+        headers: {
+          'Content-Type': 'audio/mpeg',
+          'Content-Length': buffer.byteLength.toString(),
+        },
+      });
+    } catch (openaiError: any) {
+      console.error('OpenAI TTS error:', openaiError);
+      
+      // Handle specific OpenAI errors
+      if (openaiError.status === 429) {
+        return NextResponse.json(
+          { success: false, error: 'Rate limit exceeded. Please try again later.' },
+          { status: 429 }
+        );
+      }
+      
+      throw openaiError; // Re-throw to be caught by the outer catch
+    }
   } catch (error) {
     console.error('Error generating speech:', error);
     return NextResponse.json(

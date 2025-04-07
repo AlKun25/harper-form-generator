@@ -46,13 +46,17 @@ export default function Dashboard() {
       
       setCompanyMemory(memoryData.data);
       
-      // Generate form with AI
+      // Generate form with AI - pass along memory data to avoid another fetch
       const formResponse = await fetch('/api/form-generation', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ companyId }),
+        body: JSON.stringify({ 
+          companyId,
+          // Include the memory data to avoid a redundant API call
+          memoryData
+        }),
       });
       
       const formResult = await formResponse.json();
@@ -73,9 +77,14 @@ export default function Dashboard() {
   const handleFormUpdate = (updates: Partial<InsuranceFormType>) => {
     if (!formData) return;
     
-    setFormData({
-      ...formData,
-      ...updates
+    console.log("Dashboard - Received form updates:", updates);
+    
+    // Use function form of setState to ensure we have the latest state
+    setFormData(prevData => {
+      if (!prevData) return prevData;
+      const updatedData = { ...prevData, ...updates };
+      console.log("Dashboard - Updated form data:", updatedData);
+      return updatedData;
     });
   };
 
@@ -130,10 +139,10 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
                 <div className="border-b border-gray-200 dark:border-gray-700 px-6 py-4">
-                  <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">Generated Form</h2>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Form data extracted from company information</p>
+                  <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">Insurance Form</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Form data for your insurance application</p>
                 </div>
-                <div className="p-6">
+                <div className="p-6 overflow-y-auto max-h-[600px]">
                   <InsuranceForm 
                     formData={formData} 
                     onEditForm={handleFormUpdate} 
@@ -141,10 +150,10 @@ export default function Dashboard() {
                 </div>
               </div>
               
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden sticky top-6 self-start">
                 <div className="border-b border-gray-200 dark:border-gray-700 px-6 py-4">
-                  <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">Voice Assistant</h2>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Modify the form using voice or text</p>
+                  <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">Insurance Advisor</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Get help with your application</p>
                 </div>
                 <div className="p-0">
                   <ConversationInterface 

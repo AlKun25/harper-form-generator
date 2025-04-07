@@ -70,21 +70,18 @@ const adaptFromInsuranceForm = (updates: Partial<InsuranceForm> & Record<string,
     if (!acord125Updates.applicant_information.named_insured.mailing_address) acord125Updates.applicant_information.named_insured.mailing_address = {};
     acord125Updates.applicant_information.named_insured.mailing_address.street_address = updates.address;
   }
-  
   if (updates.city !== undefined) {
     if (!acord125Updates.applicant_information) acord125Updates.applicant_information = {};
     if (!acord125Updates.applicant_information.named_insured) acord125Updates.applicant_information.named_insured = {};
     if (!acord125Updates.applicant_information.named_insured.mailing_address) acord125Updates.applicant_information.named_insured.mailing_address = {};
     acord125Updates.applicant_information.named_insured.mailing_address.city = updates.city;
   }
-  
   if (updates.state !== undefined) {
     if (!acord125Updates.applicant_information) acord125Updates.applicant_information = {};
     if (!acord125Updates.applicant_information.named_insured) acord125Updates.applicant_information.named_insured = {};
     if (!acord125Updates.applicant_information.named_insured.mailing_address) acord125Updates.applicant_information.named_insured.mailing_address = {};
     acord125Updates.applicant_information.named_insured.mailing_address.state = updates.state;
   }
-  
   if (updates.zipCode !== undefined) {
     if (!acord125Updates.applicant_information) acord125Updates.applicant_information = {};
     if (!acord125Updates.applicant_information.named_insured) acord125Updates.applicant_information.named_insured = {};
@@ -156,8 +153,45 @@ export default function CompanyPage() {
   }, [isLoaded, isSignedIn, router]);
 
   useEffect(() => {
-    if (!companyId || !isSignedIn) return;
+    // If we've already fetched the data or required conditions aren't met, don't fetch again
+    if (!companyId || !isSignedIn || dataFetched) return;
 
+    // Check session storage for a fetch flag to prevent redundant fetches on reload
+    const fetchFlagKey = `fetched_company_${companyId}`;
+    const formDataKey = `form_data_company_${companyId}`;
+    const companyDataKey = `company_data_${companyId}`;
+    const alreadyFetched = sessionStorage.getItem(fetchFlagKey);
+    
+    if (alreadyFetched) {
+      console.log(`Using cached data for company ID: ${companyId}`);
+      
+      // Try to load cached data from sessionStorage
+      try {
+        const cachedFormData = sessionStorage.getItem(formDataKey);
+        const cachedCompanyData = sessionStorage.getItem(companyDataKey);
+        
+        if (cachedFormData) {
+          setFormData(JSON.parse(cachedFormData));
+        }
+        
+        if (cachedCompanyData) {
+          setCompanyData(JSON.parse(cachedCompanyData));
+        }
+        
+        setDataFetched(true);
+        setLoading(false);
+      } catch (error) {
+        console.error("Error loading cached data:", error);
+        // If there's an error with cached data, we'll continue with a fresh fetch
+        sessionStorage.removeItem(fetchFlagKey);
+        sessionStorage.removeItem(formDataKey);
+        sessionStorage.removeItem(companyDataKey);
+        // We don't set dataFetched true here to allow the fetch to proceed
+      }
+      return;
+    }
+
+    let isMounted = true;
     const fetchCompanyAndGenerateForm = async () => {
       setLoading(true);
       setError(null);
@@ -175,17 +209,20 @@ export default function CompanyPage() {
         
         const company = companyData.success ? companyData.data.find((c: any) => c.id === companyId) : null;
         
+        let companyInfo = null;
         if (!company) {
           console.warn(`Company with ID ${companyId} not found, but will continue to check for memory data`);
           companyExists = false;
         } else {
-          setCompanyData({
+          companyInfo = {
             name: company.name,
             industry: company.industry
-          });
+          };
+          setCompanyData(companyInfo);
         }
         
         // Fetch company memory - even if company doesn't exist
+        console.log(`Fetching memory data for company ID: ${companyId}`);
         const memoryResponse = await fetch(`/api/memory?companyId=${companyId}`);
         const memoryData = await memoryResponse.json();
         
@@ -202,14 +239,16 @@ export default function CompanyPage() {
           
           // Handle case where company doesn't exist but memory does
           if (!companyExists) {
-            setCompanyData({
+            companyInfo = {
               name: `Memory Only (ID: ${companyId})`,
               industry: 'Unknown'
-            });
+            };
+            setCompanyData(companyInfo);
           }
         }
         
         // Generate form with AI - will work if either company or memory exists
+        // Pass along the memory data to avoid a redundant API call
         const formResponse = await fetch('/api/form-generation', {
           method: 'POST',
           headers: {
@@ -231,10 +270,14 @@ export default function CompanyPage() {
         setFormData(formResult.data);
         setFormType(formResult.formType || 'acord125');
       } catch (err) {
+        if (isMounted) {
         console.error('Error in form generation process:', err);
         setError(err instanceof Error ? err.message : 'An unknown error occurred');
+        }
       } finally {
+        if (isMounted) {
         setLoading(false);
+        }
       }
     };
 

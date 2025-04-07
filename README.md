@@ -99,6 +99,29 @@ Harper Form Generator streamlines the insurance form generation process by lever
 - Google Generative AI (Gemini) as a fallback option
 - Deepgram for speech-to-text conversion
 - PDF-lib for PDF generation
+- Multi-step FormAgent for robust conversational form editing
+
+## Form Agent Architecture
+
+The application implements a sophisticated agent-based architecture for conversational form editing:
+
+1. **Form Agent Design**: A multi-step agent breaks down user requests into four distinct phases:
+   - **Intent Analysis**: Understands what the user wants to do (update a field, ask a question, etc.)
+   - **Context Retrieval**: Determines relevant form fields and data for the request
+   - **Form Updates**: Extracts specific updates needed for the form
+   - **Response Generation**: Creates a natural, helpful response for the user
+
+2. **State Management**: The agent maintains conversation state and form data throughout the interaction.
+
+3. **Hook-based Integration**: A `useFormAgent` hook encapsulates the agent functionality for easy integration with React components.
+
+4. **Fallback Mechanisms**: The system gracefully handles errors and AI provider limitations.
+
+This architecture enables more sophisticated form editing capabilities compared to single-prompt approaches, including:
+- Better understanding of ambiguous requests
+- Improved recognition of form field references
+- More natural conversational flow
+- Enhanced error handling and recovery
 
 ## Getting Started
 
